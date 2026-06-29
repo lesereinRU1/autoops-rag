@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoOps RAG</title>
+  <style>
+    :root { color-scheme: light; --ink:#132238; --blue:#155eef; --line:#dce3ed; --soft:#f4f7fb; }
+    * { box-sizing:border-box; } body { margin:0; font:15px/1.6 system-ui,"Microsoft YaHei",sans-serif; color:var(--ink); background:#eef2f7; }
+    main { max-width:1100px; margin:38px auto; padding:0 20px; }
+    header,section { background:white; border:1px solid var(--line); border-radius:16px; padding:24px; margin-bottom:18px; box-shadow:0 10px 30px #243b5a0b; }
+    h1 { margin:0 0 4px; font-size:28px; } .sub { color:#5e6d80; margin:0; }
+    .status { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; } .pill { background:var(--soft); border-radius:999px; padding:5px 11px; }
+    textarea,input,select { width:100%; border:1px solid #bbc6d5; border-radius:10px; padding:11px; font:inherit; background:white; }
+    textarea { min-height:90px; resize:vertical; } .grid { display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; margin:12px 0; }
+    button { border:0; border-radius:10px; padding:10px 18px; color:white; background:var(--blue); font-weight:650; cursor:pointer; }
+    button.secondary { background:#43536a; }
+    button:disabled { opacity:.55; } #answer { white-space:pre-wrap; background:var(--soft); border-radius:12px; padding:16px; min-height:72px; }
+    .hit { border-top:1px solid var(--line); padding:14px 0; } .meta { font-size:13px; color:#607086; } .score { color:var(--blue); font-weight:700; }
+    .tag { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px; background:#e7f6ed; color:#087443; font-size:12px; }
+    details { margin-top:8px; } summary { cursor:pointer; color:#42546b; font-weight:650; }
+    .tech-panel { border-top:1px solid var(--line); margin-top:18px; padding-top:14px; }
+    .evidence-text { margin-top:8px; padding:12px; border-radius:8px; background:var(--soft); white-space:pre-wrap; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; } .actions button { background:#34445b; }
+    .actions[hidden] { display:none !important; }
+    .actions button.verify { background:#087443; } .trace { display:grid; gap:8px; }
+    .trace-item { background:var(--soft); border-left:4px solid var(--blue); border-radius:8px; padding:9px 12px; }
+    .relation { display:inline-block; margin:3px; padding:4px 8px; border-radius:8px; background:#edf3ff; font-size:13px; }
+    @media (max-width:700px) { .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body><main>
+  <header>
+    <h1>AutoOps RAG</h1>
+    <p class="sub">S7-1200 / Modbus 本地手册检索和引用</p>
+    <div class="status" id="status"><span class="pill">正在读取索引状态…</span></div>
+  </header>
+  <section>
+    <label for="question"><strong>问题</strong></label>
+    <textarea id="question">为什么设备手册写 40001，而 Modbus TCP 报文地址常从 0 开始？</textarea>
+    <div class="grid">
+      <select id="model" aria-label="设备型号"><option value="S7-1200">S7-1200 经典系列（V4.6英文手册）</option><option value="S7-1200 G2">S7-1200 G2（2025中文手册）</option><option value="">不限定型号</option></select>
+      <input id="version" placeholder="固件版本（可空）" aria-label="版本">
+      <select id="mode" aria-label="调用方式"><option value="chat">手册问答</option><option value="search">只检索</option></select>
+    </div>
+    <button id="ask">开始查询</button> <button id="clearSession" class="secondary" type="button">清空本页会话</button> <span id="sessionStatus" class="meta"></span>
+  </section>
+  <section>
+    <h2>回答</h2><div id="answer">等待查询。</div><div id="runtime" class="meta"></div>
+    <div class="actions" id="actions" hidden>
+      <button id="helpful">👍 有帮助</button><button id="unhelpful">👎 无帮助</button>
+      <button class="verify" id="verify">保存为已确认方案</button>
+      <span id="actionStatus" class="meta"></span>
+    </div>
+    <details class="tech-panel"><summary>查看处理过程和知识关系</summary>
+      <h3>处理过程</h3><div id="trace" class="trace">等待查询。</div>
+      <h3>知识关系</h3><div id="graphContext">等待查询。</div>
+    </details>
+    <details class="tech-panel"><summary>查看 RAG Trace</summary>
+      <div id="ragTrace" class="trace">等待查询。</div>
+    </details>
+    <h2>参考依据</h2><p class="meta">点击来源可查看原文、表格内容和技术标识。</p><div id="evidence"></div>
+  </section>
+</main>
+<script>
+const statusBox=document.querySelector('#status'), answer=document.querySelector('#answer'), runtimeBox=document.querySelector('#runtime'), evidence=document.querySelector('#evidence'), button=document.querySelector('#ask'), clearSessionButton=document.querySelector('#clearSession'), sessionStatus=document.querySelector('#sessionStatus'), actions=document.querySelector('#actions'), traceBox=document.querySelector('#trace'), graphBox=document.querySelector('#graphContext'), ragTraceBox=document.querySelector('#ragTrace'), actionStatus=document.querySelector('#actionStatus');
+const sessionId=localStorage.getItem('autoopsSessionId')||(`web-${Date.now()}-${Math.random().toString(16).slice(2)}`);localStorage.setItem('autoopsSessionId',sessionId);
+let lastRequest=null,lastResponse=null;
+async function loadStatus(){const [hr,mr]=await Promise.all([fetch('/health'),fetch('/api/metrics/business')]);const s=await hr.json(),m=await mr.json();statusBox.innerHTML=`<span class="pill">索引 ${s.indexed_chunks} 块</span><span class="pill">表格行 ${s.table_row_chunks}</span><span class="pill">结构化表 ${s.structured_tables}</span><span class="pill">向量 ${s.embedding_backend}</span><span class="pill">模型 ${s.llm_enabled?escapeHtml(s.llm_model):'未启用'}</span><span class="pill">活跃资料 ${s.active_sources}</span><span class="pill">资料核验 ${s.latest_checked_at}</span><span class="pill">反馈 ${m.feedback_total}</span><span class="pill">已验证方案 ${m.verified_solutions}</span>`;}
+function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');}
+function displayDocName(name){const names={'S7-1200 Programmable Controller System Manual V4.6':'S7-1200 可编程控制器系统手册 V4.6（英文原文）','Modbus/TCP with MB_CLIENT and MB_SERVER':'S7-1200/1500 Modbus TCP 通信专题（英文原文）'};return names[name]||name;}
+function showHits(hits){evidence.innerHTML=(hits||[]).map((h,i)=>{const m=h.chunk.metadata||{},isTable=m.representation==='table_row',tag=isTable?`<span class="tag">结构化表格，第 ${escapeHtml(m.row_index)} 行</span>`:'',name=displayDocName(h.chunk.doc_name);return `<div class="hit"><div><strong>来源 ${i+1}</strong>，${escapeHtml(name)}，第 ${h.chunk.page} 页 ${tag}</div><details><summary>查看原文和技术标识</summary><div class="meta">相关度 ${(h.rerank_score??h.score).toFixed(4)}，切片标识 ${escapeHtml(h.chunk.chunk_id)}${isTable?`，表格标识 ${escapeHtml(m.table_id)}`:''}</div><div class="evidence-text">${escapeHtml(h.chunk.text.slice(0,700))}</div></details></div>`;}).join('')||'没有检索结果。';}
+const nodeLabels={conversation_context:'最近问题补充',route:'问题识别与工具选择',knowledge_graph:'知识关系匹配',verified_memory:'历史验证方案检查',hybrid_retrieval:'混合检索',evidence_gate:'证据充分性检查',query_rewrite:'问题改写',answer_with_citations:'生成带来源回答'};
+const keyLabels={turns_used:'使用历史轮数',history_chars:'历史字符数',tool:'工具',reason:'原因',matched_entities:'命中实体',expanded_terms:'扩展词',relations:'关系数',solution_id:'方案编号',similarity:'相似度',decision:'处理结果',strategy:'检索策略',query_expanded:'是否扩展查询',hits:'结果数',distinct_documents:'文档数',top_score:'最高相关度',sufficient:'证据是否充分',retry_count:'重试次数',attempt:'第几次',evidence_count:'证据数',mode:'回答方式'};
+const valueLabels={search_manual:'手册检索',lookup_alarm_code:'故障码查询',check_parameter_range:'参数范围查询',no_verified_match:'没有匹配的已验证方案',reuse_with_manual_verification:'复用并重新核对手册',local_extractive:'本地证据摘录',llm_grounded:'外部模型基于证据生成'};
+function displayValue(v){if(typeof v==='boolean')return v?'是':'否';if(Array.isArray(v))return v.map(displayValue).join('、')||'无';return valueLabels[v]||v;}
+function showTrace(items){traceBox.innerHTML=(items||[]).map((x,i)=>`<div class="trace-item"><strong>${i+1}. ${nodeLabels[x.node]||x.node}</strong><div class="meta">${Object.entries(x).filter(([k])=>k!=='node').map(([k,v])=>`${keyLabels[k]||k}：${escapeHtml(displayValue(v))}`).join('；')}</div></div>`).join('')||'只检索模式不执行完整处理流程。';}
+function showGraph(kg){const types={instruction:'指令',alarm:'故障码',parameter:'参数',protocol:'协议',device:'设备'};const entities=(kg?.matched_entities||[]).map(x=>`<span class="relation">${types[x.type]||x.type}：${escapeHtml(x.label)}</span>`).join('');const relations=(kg?.relations||[]).map(x=>`<span class="relation">${escapeHtml(x.source)}，${escapeHtml(x.relation)}，${escapeHtml(x.target)}</span>`).join('');graphBox.innerHTML=entities||relations?`<div>${entities}</div><div>${relations}</div>`:'本次问题没有命中预设的知识关系。';}
+function showRagTrace(t){if(!t){ragTraceBox.textContent='只检索模式不生成 RAG Trace。';return;}const tokens=t.token_usage_available?`${t.total_tokens}（输入 ${t.input_tokens}，输出 ${t.output_tokens}）`:`未返回（${t.token_usage_missing_reason||'原因未知'}）`;const contexts=(t.injected_context||[]).map(x=>`<details><summary>${escapeHtml(x.chunk_id)}，${escapeHtml(displayDocName(x.doc_name))}，第 ${x.page} 页</summary><div class="evidence-text">${escapeHtml(x.text)}</div></details>`).join('');ragTraceBox.innerHTML=`<div class="trace-item"><strong>请求</strong><div class="meta">编号：${escapeHtml(t.request_id)}；原始问题：${escapeHtml(t.original_question)}；工具：${escapeHtml(displayValue(t.selected_tool))}</div></div><div class="trace-item"><strong>检索链路</strong><div class="meta">${escapeHtml(t.retrieval_strategy)}；改写 ${t.query_rewrite_attempts} 次；Dense ${t.dense_topk.length} 条；BM25 ${t.bm25_topk.length} 条；RRF ${t.rrf_topk.length} 条；最终 ${t.final_evidence.length} 条</div></div><div class="trace-item"><strong>生成</strong><div class="meta">模型：${escapeHtml(t.llm_model)}；方式：${escapeHtml(displayValue(t.generation_mode))}；token：${escapeHtml(tokens)}；首字耗时：${t.first_token_latency_ms??'无'} 毫秒；总耗时：${t.total_latency_ms} 毫秒；降级原因：${escapeHtml(t.fallback_reason||'无')}</div></div><div class="trace-item"><strong>使用的切片</strong><div class="meta">${escapeHtml((t.used_chunk_ids||[]).join('、')||'无')}</div>${contexts}</div>`;}
+button.onclick=async()=>{button.disabled=true;actions.hidden=true;actionStatus.textContent='';answer.textContent='正在检索…';runtimeBox.textContent='';evidence.innerHTML='';traceBox.textContent='正在执行…';graphBox.textContent='正在扩展实体…';ragTraceBox.textContent='正在记录…';const body={query:question.value,model:model.value,version:version.value,top_k:5,session_id:sessionId};lastRequest=body;try{const endpoint=mode.value==='chat'?'/api/chat':'/api/search';const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.detail||r.statusText);lastResponse=data;answer.textContent=data.answer||`找到 ${data.hits.length} 条结果`;if(data.runtime){const tokenText=data.runtime.token_usage_available?`${data.runtime.external_token_usage}（输入 ${data.runtime.external_input_tokens}，输出 ${data.runtime.external_output_tokens}）`:`未返回（${data.runtime.token_usage_missing_reason||'原因未知'}）`;runtimeBox.textContent=`总耗时 ${data.runtime.total_ms} 毫秒，检索 ${data.runtime.retrieval_rounds} 轮，外部模型 ${data.runtime.llm_model}，调用 ${data.runtime.external_llm_calls} 次，token ${tokenText}，生成方式 ${displayValue(data.runtime.generation_mode)}${data.runtime.generation_fallback_reason?`，降级原因 ${data.runtime.generation_fallback_reason}`:''}`;}showHits(data.evidence||data.hits);showTrace(data.agent_trace);showGraph(data.knowledge_graph);showRagTrace(data.rag_trace);actions.hidden=!data.answer;}catch(e){answer.textContent='错误：'+e.message;}finally{button.disabled=false;}};
+async function feedback(helpful){if(!lastResponse)return;const ids=(lastResponse.evidence||[]).map(x=>x.chunk.chunk_id);const body={session_id:sessionId,question:lastRequest.query,answer:lastResponse.answer,helpful,reason:'',selected_tool:lastResponse.selected_tool,source_chunk_ids:ids};const r=await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});actionStatus.textContent=r.ok?'反馈已记录':'反馈保存失败';loadStatus();}
+document.querySelector('#helpful').onclick=()=>feedback(true);document.querySelector('#unhelpful').onclick=()=>feedback(false);
+document.querySelector('#verify').onclick=async()=>{if(!lastResponse)return;const ids=(lastResponse.evidence||[]).map(x=>x.chunk.chunk_id);const body={model:lastRequest.model,version:lastRequest.version,problem:lastRequest.query,solution:lastResponse.answer,source_chunk_ids:ids,confirmed_by:'web-user'};const r=await fetch('/api/solutions/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();actionStatus.textContent=r.ok?`已保存为验证方案 #${data.solution_id}，后续相似问题会优先复用`:`保存失败：${data.detail}`;loadStatus();};
+clearSessionButton.onclick=async()=>{clearSessionButton.disabled=true;try{const r=await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`,{method:'DELETE'});const data=await r.json();if(!r.ok)throw new Error(data.detail||r.statusText);sessionStatus.textContent=`已清空 ${data.removed_turns} 轮记录`;lastRequest=null;lastResponse=null;actions.hidden=true;}catch(e){sessionStatus.textContent='清空失败：'+e.message;}finally{clearSessionButton.disabled=false;}};
+loadStatus().catch(e=>statusBox.textContent='状态读取失败：'+e.message);
+</script></body></html>

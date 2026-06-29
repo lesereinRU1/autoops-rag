@@ -1,0 +1,36 @@
+# Python virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment / secrets
+.env
+*.env
+.env.*
+!.env.example
+
+# Local models
+models/*
+!models/.gitkeep
+
+# Local vector/database storage
+storage/*
+!storage/.gitkeep
+
+# Raw and processed data
+data/raw/*.pdf
+data/processed/*
+!data/processed/.gitkeep
+
+# Reports
+reports/*.json
+reports/rag_traces.jsonl
+reports/*.csv
+
+# Local cache/temp
+.cache/
+.tmp/

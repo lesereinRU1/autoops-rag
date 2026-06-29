@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoOps RAG 接口测试</title>
+  <style>
+    :root { --ink:#17233a; --blue:#155eef; --line:#d8e0eb; --soft:#f4f7fb; --green:#087443; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#eef2f7; font:15px/1.65 system-ui,"Microsoft YaHei",sans-serif; }
+    main { max-width:1080px; margin:32px auto; padding:0 18px; }
+    header,section { margin-bottom:16px; padding:22px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    h1,h2 { margin-top:0; } h1 { margin-bottom:4px; }
+    .muted { color:#5c6b80; } .links { display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; }
+    a { color:var(--blue); }
+    .status { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
+    .metric { padding:12px; border-radius:10px; background:var(--soft); }
+    .metric strong { display:block; font-size:20px; }
+    label { display:block; margin:10px 0 5px; font-weight:650; }
+    textarea,select,input { width:100%; padding:10px 12px; border:1px solid #b8c4d3; border-radius:9px; background:#fff; font:inherit; }
+    textarea { min-height:86px; resize:vertical; }
+    .grid { display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+    .buttons { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+    button { padding:10px 17px; border:0; border-radius:9px; color:#fff; background:var(--blue); font-weight:650; cursor:pointer; }
+    button.secondary { background:#35465d; } button:disabled { opacity:.55; }
+    .notice { margin-top:12px; padding:10px 12px; border-left:4px solid var(--green); background:#edf8f2; }
+    .result { margin-top:14px; }
+    .answer { padding:14px; border-radius:10px; background:var(--soft); white-space:pre-wrap; }
+    .hit { padding:12px 0; border-top:1px solid var(--line); }
+    .meta { color:#617086; font-size:13px; }
+    details { margin-top:8px; } summary { cursor:pointer; font-weight:650; color:#42546b; }
+    pre { max-height:360px; overflow:auto; padding:12px; border-radius:8px; color:#e8eef7; background:#202733; white-space:pre-wrap; word-break:break-word; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    code { padding:2px 5px; border-radius:5px; background:#edf1f6; }
+    @media(max-width:720px){ .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body><main>
+  <header>
+    <h1>接口测试</h1>
+    <div class="muted">本页按钮会直接请求当前电脑上的服务。返回内容来自正在使用的Qdrant索引和资料文件。本地检索不需要API Key。</div>
+    <div class="links"><a href="/">项目页面</a><a href="/swagger">接口结构和字段定义</a><a href="/openapi.json">OpenAPI文件</a></div>
+  </header>
+
+  <section>
+    <h2>服务状态</h2>
+    <div id="status" class="status"><div class="metric">正在读取</div></div>
+    <div class="buttons"><button id="refresh">重新读取</button></div>
+    <div id="statusMessage" class="notice">页面打开时会调用 <code>GET /health</code>。</div>
+  </section>
+
+  <section>
+    <h2>手册查询</h2>
+    <div class="muted">短追问会使用本页最近1到2轮问题，记录24小时有效。可随时点击清空本页会话。</div>
+    <label for="query">问题</label>
+    <textarea id="query">为什么设备手册写40001，而Modbus TCP报文地址常从0开始？</textarea>
+    <div class="grid">
+      <div><label for="model">设备型号</label><select id="model"><option value="S7-1200">S7-1200经典系列</option><option value="S7-1200 G2">S7-1200 G2</option><option value="">不限定</option></select></div>
+      <div><label for="strategy">检索方式</label><select id="strategy"><option value="hybrid">混合检索</option><option value="bm25">关键词检索</option><option value="dense">向量检索</option></select></div>
+      <div><label for="topk">结果数量</label><select id="topk"><option>5</option><option>10</option><option>3</option></select></div>
+    </div>
+    <div class="buttons"><button id="search">只检索手册</button><button id="chat" class="secondary">生成中文回答</button><button id="clearDocsSession" class="secondary">清空本页会话</button></div>
+    <div id="requestMessage" class="notice">点击按钮后会显示HTTP状态码、耗时和实际返回结果。</div>
+    <div id="result" class="result"></div>
+  </section>
+
+  <section>
+    <h2>接口用途</h2>
+    <table>
+      <thead><tr><th>接口</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /health</code></td><td>检查服务、索引数量和资料状态。</td></tr>
+        <tr><td><code>GET /api/index/status</code></td><td>查看向量模型、Qdrant集合和切片数量。</td></tr>
+        <tr><td><code>POST /api/search</code></td><td>返回相关手册片段，不生成答案。</td></tr>
+        <tr><td><code>POST /api/chat</code></td><td>选择查询工具并生成带来源的回答。</td></tr>
+        <tr><td><code>GET /api/traces/{request_id}</code></td><td>按请求编号查看单次检索和生成记录。</td></tr>
+        <tr><td><code>GET /api/traces/recent</code></td><td>查看最近的检索和生成记录。</td></tr>
+        <tr><td><code>GET /api/alarms/{code}</code></td><td>查询结构化故障码记录。</td></tr>
+        <tr><td><code>POST /api/feedback</code></td><td>记录有帮助或无帮助。</td></tr>
+        <tr><td><code>POST /api/solutions/verify</code></td><td>保存人工确认的处理方案。</td></tr>
+        <tr><td><code>DELETE /api/sessions/{session_id}</code></td><td>清空指定会话的最近问题记录。</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<script>
+const statusBox=document.querySelector('#status'),statusMessage=document.querySelector('#statusMessage'),resultBox=document.querySelector('#result'),requestMessage=document.querySelector('#requestMessage');
+const docsSessionId=localStorage.getItem('autoopsDocsSessionId')||(`docs-${Date.now()}-${Math.random().toString(16).slice(2)}`);localStorage.setItem('autoopsDocsSessionId',docsSessionId);
+function escapeHtml(value){return String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');}
+function docName(name){const names={'S7-1200 Programmable Controller System Manual V4.6':'S7-1200可编程控制器系统手册V4.6','Modbus/TCP with MB_CLIENT and MB_SERVER':'Modbus TCP通信专题'};return names[name]||name;}
+async function send(path,options={}){const started=performance.now(),response=await fetch(path,options),text=await response.text();let data;try{data=JSON.parse(text)}catch{data=text}return {ok:response.ok,status:response.status,ms:Math.round(performance.now()-started),data};}
+async function loadStatus(){statusMessage.textContent='正在请求 GET /health';try{const r=await send('/health');if(!r.ok)throw new Error(`HTTP ${r.status}`);const s=r.data;statusBox.innerHTML=`<div class="metric">服务状态<strong>${escapeHtml(s.status)}</strong></div><div class="metric">索引切片<strong>${s.indexed_chunks}</strong></div><div class="metric">表格行<strong>${s.table_row_chunks}</strong></div><div class="metric">结构化表格<strong>${s.structured_tables}</strong></div><div class="metric">入库资料<strong>${s.active_sources}</strong></div><div class="metric">回答方式<strong>${s.llm_enabled?'外部模型':'本地证据摘录'}</strong></div><div class="metric">最近核对<strong>${escapeHtml(s.latest_checked_at)}</strong></div>`;statusMessage.textContent=`请求成功，HTTP ${r.status}，耗时 ${r.ms} 毫秒`;}catch(e){statusBox.textContent='服务状态读取失败';statusMessage.textContent=e.message;}}
+function requestBody(){return {query:document.querySelector('#query').value,model:document.querySelector('#model').value,version:'',top_k:Number(document.querySelector('#topk').value),strategy:document.querySelector('#strategy').value};}
+function renderSources(hits){return (hits||[]).map((h,i)=>`<div class="hit"><strong>来源 ${i+1}</strong>，${escapeHtml(docName(h.chunk.doc_name))}，第 ${h.chunk.page} 页<div>${escapeHtml(h.chunk.text.slice(0,260))}</div><details><summary>查看技术信息</summary><div class="meta">切片标识 ${escapeHtml(h.chunk.chunk_id)}，相关度 ${(h.rerank_score??h.score).toFixed(4)}</div></details></div>`).join('');}
+function renderRagTrace(t){if(!t)return '';const tokens=t.token_usage_available?`${t.total_tokens}（输入 ${t.input_tokens}，输出 ${t.output_tokens}）`:`未返回（${t.token_usage_missing_reason||'原因未知'}）`;return `<details><summary>查看 RAG Trace</summary><div class="notice">请求编号 ${escapeHtml(t.request_id)}<br>原始问题：${escapeHtml(t.original_question)}<br>检索链路：${escapeHtml(t.retrieval_strategy)}；Dense ${t.dense_topk.length}，BM25 ${t.bm25_topk.length}，RRF ${t.rrf_topk.length}，最终证据 ${t.final_evidence.length}<br>模型：${escapeHtml(t.llm_model)}；生成方式：${escapeHtml(t.generation_mode)}；token：${escapeHtml(tokens)}；首字耗时：${t.first_token_latency_ms??'无'} 毫秒；总耗时：${t.total_latency_ms} 毫秒；降级原因：${escapeHtml(t.fallback_reason||'无')}<br>使用切片：${escapeHtml((t.used_chunk_ids||[]).join('、')||'无')}</div><h4>注入给模型的证据</h4><pre>${escapeHtml(JSON.stringify(t.injected_context,null,2))}</pre><h4>TopK候选</h4><pre>${escapeHtml(JSON.stringify({dense:t.dense_topk,bm25:t.bm25_topk,rrf:t.rrf_topk},null,2))}</pre></details>`;}
+async function run(mode){const button=document.querySelector(mode==='search'?'#search':'#chat');button.disabled=true;requestMessage.textContent='正在发送请求';resultBox.innerHTML='';const body=requestBody(),path=mode==='search'?'/api/search':'/api/chat';try{const r=await send(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,session_id:docsSessionId})});requestMessage.textContent=`${r.ok?'请求成功':'请求失败'}，HTTP ${r.status}，耗时 ${r.ms} 毫秒`;if(r.ok){const hits=r.data.hits||r.data.evidence||[],runtime=r.data.runtime;let runtimeHtml='';if(runtime){const tokens=runtime.token_usage_available?`${runtime.external_token_usage}（输入 ${runtime.external_input_tokens}，输出 ${runtime.external_output_tokens}）`:`未返回（${runtime.token_usage_missing_reason||'原因未知'}）`;runtimeHtml=`<div class="notice">服务内部耗时 ${runtime.total_ms} 毫秒，检索 ${runtime.retrieval_rounds} 轮，外部模型 ${escapeHtml(runtime.llm_model)}，调用 ${runtime.external_llm_calls} 次，token ${escapeHtml(tokens)}，生成方式 ${escapeHtml(runtime.generation_mode)}${runtime.generation_fallback_reason?`，降级原因 ${escapeHtml(runtime.generation_fallback_reason)}`:''}</div>`;}resultBox.innerHTML=`${r.data.answer?`<h3>回答</h3><div class="answer">${escapeHtml(r.data.answer)}</div>${runtimeHtml}`:''}${renderRagTrace(r.data.rag_trace)}<h3>参考资料</h3>${renderSources(hits)}<details><summary>查看原始JSON</summary><pre>${escapeHtml(JSON.stringify(r.data,null,2))}</pre></details>`;}else{resultBox.innerHTML=`<pre>${escapeHtml(JSON.stringify(r.data,null,2))}</pre>`;}}catch(e){requestMessage.textContent='请求失败';resultBox.textContent=e.message;}finally{button.disabled=false;}}
+document.querySelector('#refresh').onclick=loadStatus;document.querySelector('#search').onclick=()=>run('search');document.querySelector('#chat').onclick=()=>run('chat');document.querySelector('#clearDocsSession').onclick=async()=>{const r=await send(`/api/sessions/${encodeURIComponent(docsSessionId)}`,{method:'DELETE'});requestMessage.textContent=r.ok?`已清空 ${r.data.removed_turns} 轮记录`:`清空失败，HTTP ${r.status}`;};loadStatus();
+</script></body></html>
