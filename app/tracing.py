@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from pathlib import Path
 from typing import Any
 
 
 _SENSITIVE_KEY_PARTS = ("api_key", "apikey", "authorization", "secret", "password")
+_SENSITIVE_TEXT_PATTERNS = (
+    re.compile(r"\b(?:LLM_)?API[_-]?KEY\b\s*[:=]\s*\S+", re.I),
+    re.compile(r"\bAuthorization\b\s*[:=]\s*(?:Bearer\s+)?\S+", re.I),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~-]+", re.I),
+    re.compile(r"\bsk-[A-Za-z0-9_-]+", re.I),
+)
 
 
 def sanitize_trace(value: Any) -> Any:
@@ -16,7 +23,7 @@ def sanitize_trace(value: Any) -> Any:
         for key, item in value.items():
             normalized = str(key).lower().replace("-", "_")
             if any(part in normalized for part in _SENSITIVE_KEY_PARTS):
-                clean[str(key)] = "[REDACTED]"
+                continue
             else:
                 clean[str(key)] = sanitize_trace(item)
         return clean
@@ -24,6 +31,11 @@ def sanitize_trace(value: Any) -> Any:
         return [sanitize_trace(item) for item in value]
     if isinstance(value, tuple):
         return [sanitize_trace(item) for item in value]
+    if isinstance(value, str):
+        clean_text = value
+        for pattern in _SENSITIVE_TEXT_PATTERNS:
+            clean_text = pattern.sub("[REDACTED]", clean_text)
+        return clean_text
     return value
 
 

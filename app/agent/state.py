@@ -7,6 +7,7 @@ from app.models import SearchHit
 
 class AgentState(TypedDict, total=False):
     question: str
+    original_question: str
     model: str
     version: str
     session_id: str
@@ -22,6 +23,7 @@ class AgentState(TypedDict, total=False):
     agent_trace: list[dict[str, Any]]
     verified_solution_used: bool
     refusal_reason: str
+    refusal_kind: str
     query_expansion_terms: list[str]
     generation_usage: dict[str, Any]
     retrieval_trace: dict[str, Any]

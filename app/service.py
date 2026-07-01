@@ -15,6 +15,7 @@ from app.ingestion.pipeline import ingest_corpus
 from app.models import ChatRequest, ChatResponse, Chunk, FeedbackRequest, SearchHit, VerifiedSolutionRequest
 from app.retrieval.hybrid import HybridRetriever
 from app.retrieval.query_expansion import technical_terms
+from app.safety import is_unsafe_operation_request
 from app.tracing import TraceStore
 
 
@@ -34,36 +35,70 @@ class AutoOpsService:
         self.access = ReadWriteLock()
         self.traces = TraceStore(PROJECT_ROOT / "reports" / "rag_traces.jsonl")
 
-    def scope_refusal_reason(self, question: str, model: str) -> str | None:
+    def scope_refusal(
+        self, question: str, model: str, version: str = ""
+    ) -> dict[str, str] | None:
         lowered = question.lower()
-        unsafe_actions = ("绕过", "旁路", "解除联锁", "强制输出", "强制写入")
-        action_requests = ("步骤", "怎么", "如何", "具体", "执行", "操作")
-        educational_markers = ("为什么不能", "为何不能", "风险", "禁止", "安全边界")
-        if any(value in lowered for value in unsafe_actions) and any(
-            value in lowered for value in action_requests
-        ) and not any(value in lowered for value in educational_markers):
-            return "请求包含绕过安全保护或强制控制的具体操作"
+        if is_unsafe_operation_request(question):
+            return {
+                "kind": "unsafe_request",
+                "reason": "请求涉及强制控制、旁路安全保护、在线写入或省略现场安全程序",
+            }
 
-        unsupported_brands = ("allen-bradley", "controlLogix", "rockwell", "三菱", "欧姆龙")
+        unsupported_brands = (
+            "allen-bradley", "controllogix", "rockwell", "三菱", "fx5u",
+            "欧姆龙", "施耐德", "schneider", "台达", "汇川", "abb",
+        )
         if any(value.lower() in lowered for value in unsupported_brands):
-            return "当前知识库只包含Siemens S7-1200和Modbus资料"
+            return {
+                "kind": "unanswerable_scope",
+                "reason": "当前知识库没有目标厂商或型号的对应资料，不能套用 Siemens S7-1200 的证据",
+            }
 
-        requested_versions = re.findall(r"(?<![A-Za-z0-9])V\d+(?:\.\d+)+", question, re.I)
+        normalized_model = re.sub(r"[\s_-]", "", model.lower())
+        if normalized_model and "s71200" not in normalized_model:
+            return {
+                "kind": "unanswerable_scope",
+                "reason": f"当前知识库没有 {model} 的对应资料，不能套用其他型号的证据",
+            }
+
+        version_text = " ".join(filter(None, (question, version)))
+        requested_versions = set(
+            re.findall(r"(?<![A-Za-z0-9])V\d+(?:\.\d+)+", version_text, re.I)
+        )
+        requested_versions.update(
+            f"V{value}"
+            for value in re.findall(
+                r"(?:固件|手册)(?:版本)?\s*(\d+(?:\.\d+)+)", version_text, re.I
+            )
+        )
         if requested_versions:
             available = {
                 chunk.version.lower()
                 for chunk in self._chunk_by_id.values()
                 if chunk.model.lower() == model.lower() and chunk.version
             }
-            for requested in requested_versions:
+            for requested in sorted(requested_versions):
                 if not any(requested.lower() in version for version in available):
-                    return f"当前索引没有{model} {requested}资料"
+                    return {
+                        "kind": "unanswerable_version",
+                        "reason": f"当前索引没有 {model} {requested} 对应资料，不能套用其他版本的证据",
+                    }
 
         alarm_values = re.findall(r"16#([0-9A-Fa-f]{2,4})", question)
         for value in alarm_values:
             if value.upper() not in self._known_alarm_codes and not self.memory.lookup_alarm(value, model):
-                return f"当前资料未收录故障码16#{value.upper()}"
+                return {
+                    "kind": "unanswerable_scope",
+                    "reason": f"当前资料未收录故障码 16#{value.upper()}，不能借用其他状态码解释",
+                }
         return None
+
+    def scope_refusal_reason(
+        self, question: str, model: str, version: str = ""
+    ) -> str | None:
+        decision = self.scope_refusal(question, model, version)
+        return decision["reason"] if decision else None
 
     @staticmethod
     def evidence_supports_query(query: str, evidence: list[SearchHit]) -> bool:
@@ -124,6 +159,7 @@ class AutoOpsService:
         graph_input = request.model_dump()
         graph_input.pop("query")
         graph_input["question"] = resolved_question
+        graph_input["original_question"] = original_question
         with self.access.read():
             state = self.graph.invoke(graph_input)
         _, warnings = validate_citations(state["answer"], state.get("evidence", []))

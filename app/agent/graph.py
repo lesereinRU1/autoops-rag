@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agent.state import AgentState
 from app.agent.tools import format_alarm, format_parameter, format_verified_solution
 from app.retrieval.query_expansion import expand_query
+from app.safety import format_policy_refusal
 
 
 PREFIXED_ALARM_PATTERN = re.compile(r"(?:16#|0x)([0-9A-Fa-f]{2,4})", re.I)
@@ -35,7 +36,14 @@ def extract_alarm(question: str) -> str | None:
 def build_graph(service):
     def parse(state: AgentState) -> AgentState:
         question = state["question"]
-        refusal_reason = service.scope_refusal_reason(question, state.get("model", "S7-1200"))
+        policy_question = state.get("original_question", question)
+        refusal = service.scope_refusal(
+            policy_question,
+            state.get("model", "S7-1200"),
+            state.get("version", ""),
+        )
+        refusal_reason = refusal["reason"] if refusal else ""
+        refusal_kind = refusal["kind"] if refusal else ""
         alarm = extract_alarm(question)
         parameter_words = (
             "范围", "上下限", "参数", "端口", "波特率", "unit id", "寄存器地址",
@@ -62,7 +70,14 @@ def build_graph(service):
             },
         ]
         if refusal_reason:
-            trace.append({"node": "scope_and_safety_gate", "accepted": False, "reason": refusal_reason})
+            trace.append(
+                {
+                    "node": "scope_and_safety_gate",
+                    "accepted": False,
+                    "category": refusal_kind,
+                    "reason": refusal_reason,
+                }
+            )
         return {
             "selected_tool": tool,
             "route_reason": reason,
@@ -71,7 +86,8 @@ def build_graph(service):
             "retry_count": 0,
             "agent_trace": trace,
             "verified_solution_used": False,
-            "refusal_reason": refusal_reason or "",
+            "refusal_reason": refusal_reason,
+            "refusal_kind": refusal_kind,
         }
 
     def after_parse(state: AgentState) -> str:
@@ -79,13 +95,12 @@ def build_graph(service):
 
     def generate_refusal(state: AgentState) -> AgentState:
         reason = state.get("refusal_reason", "现有资料不足")
+        kind = state.get("refusal_kind", "unanswerable_scope")
         trace = list(state.get("agent_trace", []))
-        trace.append({"node": "safe_refusal", "reason": reason})
+        trace.append({"node": "safe_refusal", "category": kind, "reason": reason})
         return {
-            "answer": (
-                f"不能根据当前资料回答这个问题。原因：{reason}。"
-                "请补充受支持的设备型号、固件版本或对应官方手册。"
-                "涉及旁路联锁、强制输出或带电操作时，只能由有资质人员按现场制度执行。"
+            "answer": format_policy_refusal(
+                kind, reason, state.get("model", "S7-1200")
             ),
             "evidence": [],
             "evidence_sufficient": False,
