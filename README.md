@@ -6,6 +6,10 @@
 
 本项目不连接 PLC，也不执行控制命令。涉及强制输出、旁路联锁、在线写入、接线或停送电的请求只提供安全边界和资料核对范围。
 
+![首页问答：回答、来源、耗时和模型状态](docs/images/01-首页问答.png)
+
+首页会同时展示回答、参考依据、服务耗时和当前模型状态。
+
 ## 项目背景
 
 工业设备手册通常篇幅较长，故障码、参数范围和版本差异分散在正文与表格中。实际排查时还存在三个问题：
@@ -100,6 +104,10 @@ flowchart LR
 
 安全检查位于检索和 LLM 调用之前，分为三类。
 
+![安全拒答：资料或版本不足时说明边界](docs/images/04-安全拒答.png)
+
+资料或版本不足时，系统说明缺少的信息和可查询范围，不直接套用其他版本的参数。
+
 ### 危险操作
 
 以下请求不会返回可执行步骤：
@@ -157,6 +165,8 @@ API Key 只从本地 `.env` 读取。Trace 写盘前会清理 API Key、Authoriz
 4. 生成链路：实际模型、尝试模型、token、检索/LLM/总耗时和降级原因。
 5. Agent Trace：路由、检索、证据判断、查询改写和生成节点。
 
+![RAG Trace：请求概览和检索链路](docs/images/02-Trace页面.png)
+
 `used_chunk_ids` 表示注入或使用的候选证据，不等同于答案的真实逐句引用。页面会明确提示这一点。
 
 每次 `POST /api/chat` 都返回 `request_id` 和 `rag_trace`，同时将脱敏后的 Trace 追加到本地 `reports/rag_traces.jsonl`。
@@ -180,6 +190,8 @@ Trace 用于区分 retrieval miss、ranking late、模型降级和引用问题�
 - 当前校验结果：60 questions、0 validation errors
 
 ### 当前结果
+
+![Formal Eval：检索、拒答和延迟指标](docs/images/06-评测指标.png)
 
 | 指标 | Development | Test | 口径 |
 |---|---:|---:|---|
@@ -416,4 +428,3 @@ autoops-rag/
 - [Trace 字段差距分析](reports/trace_gap_analysis.md)
 - [项目展示规划](reports/项目展示整理.md)
 - [本地操作手册](操作手册.md)
-

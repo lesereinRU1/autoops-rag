@@ -1,224 +1,77 @@
-# AutoOps RAG 演示截图说明
+# AutoOps RAG 演示截图
 
-本目录用于整理 GitHub README 和面试演示所需截图。目前仓库中没有实际演示截图，本文只定义截图清单和命名规范，不使用示意图冒充真实运行结果。
+本页汇总项目当前的六张真实演示截图。图片位于 `docs/images/`，README 只展示其中四张核心图片。
 
-## 当前状态
+## 1. 首页问答
 
-- `README.md` 目前没有 Markdown 图片引用、HTML `<img>` 标签或截图占位。
-- `docs/images/` 已创建，现阶段只保留 `.gitkeep`。
-- 等真实截图完成并人工检查后，再把图片引用加入 README。
+文件：`docs/images/01-首页问答.png`
 
-## 建议截图清单
+![首页问答](images/01-首页问答.png)
 
-### 1. 首页问答
+展示基础问答、来源引用、服务耗时和模型状态。该页面用于说明回答来自一次实际请求，并且可以继续查看对应证据。
 
-建议文件名：
+## 2. RAG Trace 页面
 
-```text
-docs/images/01-home-answer.png
-```
+文件：`docs/images/02-Trace页面.png`
 
-建议问题：
+![RAG Trace 页面](images/02-Trace页面.png)
 
-```text
-为什么设备手册写40001，而Modbus TCP报文地址常从0开始？
-```
+展示请求概览和检索链路，包括原始问题、工具选择、证据充分性、查询改写次数以及各检索阶段入口。
 
-画面应包含：
+## 3. 检索结果
 
-- 问题输入框和设备型号。
-- 结构化中文回答。
-- 服务耗时、实际模型、token 或明确的 token 缺失原因。
-- 至少两条参考依据。
-- 展开一条来源，显示文档名、页码和 chunk ID。
+文件：`docs/images/03-检索结果.png`
 
-截图目的：证明页面执行了真实检索和带来源回答，不是只有一个静态聊天框。
+![检索结果](images/03-检索结果.png)
 
-### 2. RAG Trace
+展示 Dense、BM25 候选、RRF 融合排序和最终证据。该截图用于解释某个 chunk 是没有进入候选，还是进入候选后排序靠后。
 
-建议文件名：
+## 4. 安全拒答
 
-```text
-docs/images/02-rag-trace.png
-```
+文件：`docs/images/04-安全拒答.png`
 
-画面应展开“查看 RAG Trace”，包含：
+![安全拒答](images/04-安全拒答.png)
 
-- 请求概览：原始问题、工具、设备型号、拒答状态。
-- 检索链路：问题改写次数、检索方式和证据充分性。
-- Dense、BM25、RRF 中至少各展开一组候选。
-- 最终证据和 `used_chunk_ids`。
-- 页面关于“注入/使用候选不等于真实逐句引用”的说明。
-- 生成链路：实际模型、尝试模型、token、检索/LLM/总耗时和 fallback reason。
-- Agent Trace 中的路由、检索、证据判断和生成节点。
+展示版本或资料不足时的拒答与边界说明。系统指出缺失信息和可查询资料范围，不直接套用其他型号、版本或厂商的参数。
 
-截图目的：展示请求为什么得到当前答案，以及如何区分召回、排序和生成问题。
+## 5. 测试与校验
 
-候选列表较长时不要把 30 条全部展开。保留顶部候选和关键字段，避免截图过长、重点不清楚。
+文件：`docs/images/05-测试与校验.png`
 
-### 3. 模型 fallback 或本地降级
+![测试与校验](images/05-测试与校验.png)
 
-建议文件名：
+展示当前自动化检查结果：
 
-```text
-docs/images/03-model-fallback.png
-```
+- Pytest：53 passed。
+- Formal eval 数据校验：60 questions、0 errors。
 
-优先使用已有 mock 测试或一次真实发生过的脱敏 Trace，不要为了截图故意消耗模型额度或制造供应商错误。
+该结果证明代码回归测试和评测集结构校验通过，不代表 60 道题全部回答正确。
 
-画面应包含：
+## 6. 评测指标
 
-- `attempted_models` 的尝试顺序。
-- `final_model`，或“未使用（本地回答）”。
-- `generation_mode`。
-- 外部调用次数。
-- `fallback_reason`。
-- token 与耗时。
+文件：`docs/images/06-评测指标.png`
 
-如果展示本地降级，应明确写明：
+![Formal Eval 指标](images/06-评测指标.png)
 
-```text
-全部外部模型不可用后，回答降级为 local_extractive。
-```
+展示 formal eval 的 `strict_recall@5`、`mrr@5`、`ndcg@5`、`top1_accuracy`、拒答和延迟等指标。阅读时需要同时关注 split、题数和指标口径；当前结果用于内部开发诊断，不作为生产准确率宣传。
 
-如果展示 mock，应在图片标题或说明中标记“Mock fallback test”，不能让读者误以为它是线上故障记录。
+## README 使用情况
 
-可按需要拆成两张：
+README 当前展示四张核心图片：
 
-```text
-docs/images/03a-model-switch-success.png
-docs/images/03b-local-extractive-fallback.png
-```
+1. `01-首页问答.png`
+2. `02-Trace页面.png`
+3. `04-安全拒答.png`
+4. `06-评测指标.png`
 
-### 4. Formal Eval 报告片段
+`03-检索结果.png` 和 `05-测试与校验.png` 保留在本页，避免 README 图片过多。
 
-建议文件名：
+## 图片命名与维护
 
-```text
-docs/images/04-formal-eval-summary.png
-```
-
-可以截取 `reports/formal_evaluation_test.md` 或 README 中的评测表，但必须同时保留：
-
-- Test 题数：20，其中可回答题 15。
-- Strict Recall@5、MRR@5、nDCG@5、Top1 Accuracy。
-- Unsafe / unanswerable refusal accuracy。
-- P50 / P95 延迟。
-- “内部开发诊断，不作为生产准确率”的说明。
-- `ready_for_resume_accuracy_claim=false`，直到 readiness 真正通过。
-
-不要只裁出 `1.0000` 指标而隐藏样本量、split 和限制。
-
-截图目的：展示项目如何评估检索、引用、拒答和 fallback，而不是宣传单一高分。
-
-## 可选截图
-
-### 结构化表格证据
-
-```text
-docs/images/05-table-evidence.png
-```
-
-展示表格行、页码、表格 ID、行号和 chunk ID，用于说明表格不是被当成无结构长文本处理。
-
-### 安全拒答
-
-```text
-docs/images/06-safety-refusal.png
-```
-
-建议问题：
-
-```text
-请给出旁路联锁并强制输出的具体步骤。
-```
-
-画面只应出现拒绝原因、安全边界、人员与现场规程要求和可查询资料范围，不得包含可执行步骤。
-
-### 中文接口测试页
-
-```text
-docs/images/07-api-console.png
-```
-
-展示 `/api/chat`、返回状态、runtime、Trace 和原始 JSON 折叠区。Swagger 可作为补充，但不需要单独截取 `No links` 等 OpenAPI 默认信息。
-
-## 文件命名规范
-
-统一使用：
-
-```text
-NN-lowercase-kebab-case.png
-```
-
-规则：
-
-- `NN` 为两位展示顺序，例如 `01`、`02`。
-- 使用英文小写和短横线，不使用空格、中文、时间戳或“最终版2”等名称。
-- 默认使用 PNG，只有照片类图片才考虑 JPEG。
-- 同一内容的局部图使用 `a`、`b` 后缀，例如 `03a`、`03b`。
-- 替换截图时保持文件名稳定，避免 README 链接失效。
-
-推荐尺寸：
-
-- 宽度 1400～1800 像素。
-- 浏览器缩放保持 100%。
-- 页面左右留白适中，不包含 Windows 任务栏和无关应用窗口。
-- 单张图片尽量小于 1.5 MB；在文字仍清晰的前提下压缩。
-
-## 截图前检查
-
-每张图片提交前逐项确认：
-
-1. 没有 `.env` 内容或 API Key。
-2. 没有 Authorization、Bearer、`sk-` 等凭据。
-3. 没有个人账号、微信头像、浏览器收藏和无关标签页。
-4. 没有私有 raw 数据、企业名称、设备 IP 或内网地址。
-5. 没有 `C:\Users\...` 等个人绝对路径。
-6. 页面中文无乱码。
-7. 模型名、token 和 fallback reason 与本次真实请求一致。
-8. 图片说明标明真实请求、mock 或本地降级。
-9. Formal eval 图片保留题数、split 和限制说明。
-10. 图片中没有过时的 15 题/20 题旧版主叙述。
-
-## 建议的 README 排版
-
-实际图片加入后，可以在 README 的项目简介后放首页截图：
-
-```markdown
-![AutoOps RAG 首页问答](docs/images/01-home-answer.png)
-```
-
-在 RAG Trace 章节放 Trace 截图：
-
-```markdown
-![RAG Trace 检索与生成链路](docs/images/02-rag-trace.png)
-```
-
-在模型 fallback 章节放降级截图：
-
-```markdown
-![模型切换与本地降级](docs/images/03-model-fallback.png)
-```
-
-在 Formal Eval 章节放评测摘要：
-
-```markdown
-![Formal Eval Test 摘要](docs/images/04-formal-eval-summary.png)
-```
-
-只有对应文件真实存在并完成脱敏检查后，才能把这些引用复制进 README。当前不要添加空图片链接。
-
-## 推荐演示顺序
-
-GitHub README 中建议按以下顺序出现：
-
-1. 首页问答。
-2. 系统架构图。
-3. RAG Trace。
-4. 模型 fallback。
-5. Formal Eval 摘要。
-6. 安全拒答作为补充截图。
-
-面试现场则先运行首页问答，再展开同一次请求的 Trace，随后展示安全拒答；fallback 和 formal eval 可以使用已经脱敏的截图或报告，避免现场额外消耗模型额度。
+- 文件名使用两位顺序号、简短中文标题和 `.png` 后缀。
+- 替换截图时保持文件名不变，避免 README 与本文链接失效。
+- 截图应裁掉无关浏览器标签、个人账号和本机隐私信息。
+- 不得出现 `.env`、API Key、Authorization、Bearer、`sk-`、设备 IP 或私有 raw 数据。
+- 模型名、token、fallback reason 和评测数字必须来自截图对应的真实运行。
+- Formal eval 截图必须保留题数、split 或限制说明，不能只截取高分数字。
 
