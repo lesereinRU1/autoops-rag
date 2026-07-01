@@ -4,10 +4,12 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 import sys
 import time
 import uuid
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,7 +24,9 @@ if str(ROOT) not in sys.path:
 from scripts.llm_smoke_test import evaluate_claims, extract_cited_chunk_ids
 from app.safety import classify_forbidden_facts, unsafe_response_violations
 from app.tracing import sanitize_trace
+from app.evaluation.required_fact_checker import diagnose_required_fact
 from scripts.validate_formal_eval import (
+    CHUNKS_FILE,
     DEFAULT_DATASET,
     DEFAULT_REPORT as READINESS_REPORT,
     DEFAULT_SCHEMA,
@@ -31,6 +35,7 @@ from scripts.validate_formal_eval import (
 
 
 DEFAULT_OUTPUT = ROOT / "reports" / "formal_evaluation.json"
+DEFAULT_MARKDOWN_OUTPUT = ROOT / "reports" / "formal_evaluation.md"
 DISCLAIMER = (
     "正式指标只有在ready_for_resume_accuracy_claim=true时才可用于简历；"
     "当前20题smoke test不属于本数据集。"
@@ -51,6 +56,21 @@ def mean(values: list[float]) -> float | None:
 def normalized_contains(text: str, fact: str) -> bool:
     normalize = lambda value: "".join(value.lower().split())
     return normalize(fact) in normalize(text)
+
+
+def validate_formal_citations(answer: str, evidence_ids: list[str]) -> bool:
+    """Validate grounded chunk IDs and numbered local-fallback citations."""
+    cited_ids = extract_cited_chunk_ids(answer)
+    source_numbers = [
+        int(value) for value in re.findall(r"\[来源\s*(\d+)\b", answer or "")
+    ]
+    if not cited_ids and not source_numbers:
+        return False
+    if cited_ids and not set(cited_ids).issubset(set(evidence_ids)):
+        return False
+    if source_numbers and not all(1 <= number <= len(evidence_ids) for number in source_numbers):
+        return False
+    return True
 
 
 def ndcg_at_5(retrieved: list[str], gold: set[str]) -> float:
@@ -82,6 +102,98 @@ def empty_report(
     }
 
 
+def load_chunk_texts(path: Path = CHUNKS_FILE) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    result: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        value = json.loads(line)
+        result[str(value["chunk_id"])] = str(value.get("text", ""))
+    return result
+
+
+def render_markdown_report(report: dict[str, Any]) -> str:
+    metrics = report.get("metrics", {})
+    summary = report.get("required_fact_diagnostics_summary", {})
+    lines = [
+        "# Formal Evaluation Report",
+        "",
+        "> 当前正式集仍未达到 readiness 门槛时，本报告只能用于开发诊断，不能作为简历准确率宣传。",
+        "",
+        "## Core metrics",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+    ]
+    metric_names = (
+        "strict_recall@5",
+        "mrr@5",
+        "ndcg@5",
+        "top1_accuracy",
+        "claim_support_rate",
+        "unsupported_claim_count",
+        "citation_chunk_valid_rate",
+        "required_fact_exact_coverage",
+        "required_fact_diagnostic_coverage",
+        "unanswerable_refusal_accuracy",
+        "unsafe_refusal_accuracy",
+        "forbidden_fact_violation_count",
+    )
+    for name in metric_names:
+        lines.append(f"| `{name}` | {metrics.get(name)} |")
+    lines.extend(
+        [
+            "",
+            "`required_fact_exact_coverage` 保留历史完整子串口径。"
+            "`required_fact_diagnostic_coverage` 使用离线确定性规范化、同义短语和原子事实匹配，"
+            "只用于诊断，不作为最终准确率宣传。",
+            "",
+            "required_fact_coverage 低不能直接等同于模型错误；必须区分 checker 误判、真实漏答、"
+            "复合标签和 required_fact/gold 不对齐。",
+            "",
+            "## Required fact diagnostic breakdown",
+            "",
+            "| Type | Count |",
+            "|---|---:|",
+            f"| exact_match | {summary.get('exact_match', 0)} |",
+            f"| semantic_match | {summary.get('semantic_match', 0)} |",
+            f"| checker_false_negative | {summary.get('checker_false_negative', 0)} |",
+            f"| missing_from_answer | {summary.get('missing_from_answer', 0)} |",
+            f"| required_fact_too_broad | {summary.get('required_fact_too_broad', 0)} |",
+            "| required_fact_not_directly_supported_by_gold | "
+            f"{summary.get('required_fact_not_directly_supported_by_gold', 0)} |",
+            "",
+            "## Per-question required fact coverage",
+            "",
+            "| ID | Exact | Diagnostic | Facts |",
+            "|---|---:|---:|---:|",
+        ]
+    )
+    for item in report.get("details", []):
+        total = int(item.get("required_fact_total", 0))
+        if not total:
+            lines.append(f"| {item['id']} | N/A | N/A | 0 |")
+            continue
+        exact = len(item.get("required_fact_hits", [])) / total
+        diagnostic = len(item.get("required_fact_diagnostic_hits", [])) / total
+        lines.append(f"| {item['id']} | {exact:.4f} | {diagnostic:.4f} | {total} |")
+    lines.extend(
+        [
+            "",
+            "## Limitations",
+            "",
+            "- Diagnostic matching is deterministic and does not call an LLM.",
+            "- Semantic matching is deliberately conservative and keeps atomic match evidence in JSON.",
+            "- A diagnostic match is counted only when the human gold text also supports the required fact.",
+            "- The legacy `required_fact_coverage` field remains an alias of exact coverage for compatibility.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -93,11 +205,14 @@ def main() -> int:
     parser.add_argument("--split", choices=("development", "test", "all"), default="test")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--markdown-output", type=Path, default=DEFAULT_MARKDOWN_OUTPUT)
     args = parser.parse_args()
     dataset = args.dataset.resolve()
     schema = args.schema.resolve()
     output = args.output.resolve()
+    markdown_output = args.markdown_output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    markdown_output.parent.mkdir(parents=True, exist_ok=True)
     READINESS_REPORT.parent.mkdir(parents=True, exist_ok=True)
 
     readiness, rows = validate_dataset(dataset, schema, check_chunk_existence=True)
@@ -148,6 +263,7 @@ def main() -> int:
         return 1
 
     before_hash = hashlib.sha256(dataset.read_bytes()).hexdigest()
+    chunk_texts = load_chunk_texts()
     run_id = uuid.uuid4().hex[:12]
     details: list[dict[str, Any]] = []
     base_url = args.base_url.rstrip("/")
@@ -188,13 +304,25 @@ def main() -> int:
                 )
                 cited_ids = extract_cited_chunk_ids(result.get("answer", ""))
                 citation_valid = (
-                    bool(cited_ids) and set(cited_ids).issubset(set(evidence_ids))
+                    validate_formal_citations(result.get("answer", ""), evidence_ids)
                     if row["answerable"]
                     else None
                 )
                 required_hits = [
                     fact for fact in row["required_facts"]
                     if normalized_contains(result.get("answer", ""), fact)
+                ]
+                gold_text = "\n".join(
+                    chunk_texts.get(chunk_id, "") for chunk_id in row["gold_chunk_ids"]
+                )
+                required_fact_diagnostics = [
+                    diagnose_required_fact(fact, result.get("answer", ""), gold_text).to_dict()
+                    for fact in row["required_facts"]
+                ]
+                required_diagnostic_hits = [
+                    item["required_fact"]
+                    for item in required_fact_diagnostics
+                    if item["diagnostic_covered"]
                 ]
                 forbidden_hits, forbidden_false_positives = classify_forbidden_facts(
                     result.get("answer", ""), row["forbidden_facts"]
@@ -213,7 +341,7 @@ def main() -> int:
                     fallback_event
                     and bool(result.get("answer"))
                     and bool(evidence_ids)
-                    and bool(cited_ids)
+                    and bool(citation_valid)
                 )
                 detail = {
                     "id": row["id"],
@@ -245,6 +373,8 @@ def main() -> int:
                     "unsupported_claims": unsupported,
                     "citation_chunk_valid": citation_valid,
                     "required_fact_hits": required_hits,
+                    "required_fact_diagnostic_hits": required_diagnostic_hits,
+                    "required_fact_diagnostics": required_fact_diagnostics,
                     "required_fact_total": len(row["required_facts"]),
                     "forbidden_fact_hits": forbidden_hits,
                     "forbidden_fact_checker_false_positives": forbidden_false_positives,
@@ -301,6 +431,20 @@ def main() -> int:
     ]
     total_required = sum(item.get("required_fact_total", 0) for item in answerable_details)
     hit_required = sum(len(item.get("required_fact_hits", [])) for item in answerable_details)
+    diagnostic_hit_required = sum(
+        len(item.get("required_fact_diagnostic_hits", [])) for item in answerable_details
+    )
+    required_fact_diagnostics = [
+        fact
+        for item in answerable_details
+        for fact in item.get("required_fact_diagnostics", [])
+    ]
+    required_fact_classifications = Counter(
+        fact.get("classification", "") for fact in required_fact_diagnostics
+    )
+    required_fact_match_types = Counter(
+        fact.get("match_type", "") for fact in required_fact_diagnostics
+    )
     fallback_events = [item for item in successful if item.get("fallback_event")]
     checker_false_positives = [
         {
@@ -342,6 +486,11 @@ def main() -> int:
         ),
         "required_fact_coverage": round(hit_required / total_required, 4)
         if total_required else None,
+        "required_fact_exact_coverage": round(hit_required / total_required, 4)
+        if total_required else None,
+        "required_fact_diagnostic_coverage": round(
+            diagnostic_hit_required / total_required, 4
+        ) if total_required else None,
         "forbidden_fact_violation_count": sum(
             len(item.get("forbidden_fact_hits", [])) for item in successful
         ),
@@ -380,6 +529,25 @@ def main() -> int:
             "ready_for_resume_accuracy_claim"
         ],
         "metrics": metrics,
+        "required_fact_diagnostics_summary": {
+            "exact_match": required_fact_match_types.get("exact_match", 0),
+            "semantic_match": required_fact_match_types.get("semantic_match", 0),
+            "checker_false_negative": required_fact_classifications.get(
+                "checker_false_negative", 0
+            ),
+            "missing_from_answer": required_fact_classifications.get(
+                "missing_from_answer", 0
+            ),
+            "required_fact_too_broad": required_fact_classifications.get(
+                "required_fact_too_broad", 0
+            ),
+            "required_fact_not_directly_supported_by_gold": required_fact_classifications.get(
+                "required_fact_not_directly_supported_by_gold", 0
+            ),
+            "total_required_facts": total_required,
+            "diagnostic_metric_is_official_accuracy": False,
+            "diagnostic_method": "offline_deterministic_normalization_synonym_atomic_matching",
+        },
         "metric_denominators": {
             "successful_requests": len(successful),
             "answerable": len(answerable_details),
@@ -387,6 +555,8 @@ def main() -> int:
             "unsafe": len(unsafe_details),
             "claim_sentences": len(claim_checks),
             "required_facts": total_required,
+            "required_fact_exact_hits": hit_required,
+            "required_fact_diagnostic_hits": diagnostic_hit_required,
             "fallback_events": len(fallback_events),
         },
         "unsupported_claims": unsupported,
@@ -398,10 +568,13 @@ def main() -> int:
             "required_fact_coverage和forbidden facts使用预标注短语匹配。",
             "claim_support_rate使用可审计规则检查，正式发布前仍需人工抽查。",
             "Recall@5不能单独作为项目质量结论。",
+            "required_fact_coverage保留为exact口径兼容字段；required_fact_diagnostic_coverage仅用于诊断，不能作为最终准确率宣传。",
+            "required_fact coverage低不能直接等同于模型错误，需结合checker_false_negative、复合标签和gold对齐情况分析。",
         ],
     }
     report = sanitize_trace(report)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    markdown_output.write_text(render_markdown_report(report), encoding="utf-8")
     print(
         json.dumps(
             {
@@ -411,6 +584,7 @@ def main() -> int:
                     "ready_for_resume_accuracy_claim"
                 ],
                 "output": str(output),
+                "markdown_output": str(markdown_output),
             },
             ensure_ascii=False,
         )
