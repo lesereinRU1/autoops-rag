@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autoops.local/schemas/formal_questions.schema.json",
+  "title": "AutoOps RAG formal evaluation question",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "question",
+    "category",
+    "answerable",
+    "expected_tool",
+    "gold_chunk_ids",
+    "gold_label_source",
+    "required_facts",
+    "forbidden_facts",
+    "source_scope",
+    "device_model",
+    "firmware_version",
+    "manual_version",
+    "review_status",
+    "reviewer",
+    "split",
+    "notes"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "question": { "type": "string", "minLength": 1 },
+    "category": {
+      "type": "string",
+      "enum": [
+        "official_parameter",
+        "alarm_code",
+        "table_query",
+        "natural_language_rewrite",
+        "cross_section_procedure",
+        "version_conflict",
+        "unanswerable_scope",
+        "unanswerable_version",
+        "unsafe_request"
+      ]
+    },
+    "answerable": { "type": "boolean" },
+    "expected_tool": {
+      "type": "string",
+      "enum": ["search_manual", "lookup_alarm_code", "check_parameter_range"]
+    },
+    "gold_chunk_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
+    },
+    "gold_label_source": {
+      "type": "string",
+      "enum": ["human_pre_labeled", "not_applicable"],
+      "description": "answerable题只能使用人工预先标注；禁止运行时生成。"
+    },
+    "required_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
+    },
+    "forbidden_facts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "pattern": ".*\\S.*" }
+    },
+    "source_scope": {
+      "type": "string",
+      "enum": ["official_manual", "project_supplement", "mixed", "out_of_scope"]
+    },
+    "device_model": { "type": "string" },
+    "firmware_version": { "type": "string" },
+    "manual_version": { "type": "string" },
+    "review_status": {
+      "type": "string",
+      "enum": ["needs_review", "self_checked", "reviewed"]
+    },
+    "reviewer": { "type": "string" },
+    "split": {
+      "type": "string",
+      "enum": ["development", "test"]
+    },
+    "notes": { "type": "string" },
+    "refusal_reason": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "answerable": { "const": true } }, "required": ["answerable"] },
+      "then": {
+        "properties": {
+          "gold_chunk_ids": { "minItems": 1 },
+          "gold_label_source": { "const": "human_pre_labeled" },
+          "required_facts": { "minItems": 1 }
+        }
+      },
+      "else": {
+        "properties": {
+          "gold_chunk_ids": { "maxItems": 0 },
+          "gold_label_source": { "const": "not_applicable" }
+        },
+        "anyOf": [
+          { "properties": { "refusal_reason": { "minLength": 1, "pattern": ".*\\S.*" } }, "required": ["refusal_reason"] },
+          { "properties": { "forbidden_facts": { "minItems": 1 } } },
+          { "properties": { "notes": { "minLength": 1, "pattern": ".*\\S.*" } } }
+        ]
+      }
+    }
+  ]
+}
