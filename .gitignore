@@ -34,3 +34,10 @@ reports/*.csv
 # Local cache/temp
 .cache/
 .tmp/
+
+# Runtime logs
+reports/*.log
+reports/*.err.log
+reports/*.out.log
+reports/*_final*.log
+reports/reindex*.log
