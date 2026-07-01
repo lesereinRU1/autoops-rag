@@ -1,6 +1,6 @@
 {
   "evaluation_type": "ranking_only_eval",
-  "generated_at": "2026-07-01T22:52:18+08:00",
+  "generated_at": "2026-07-01T23:37:12+08:00",
   "dataset": "D:\\autoops-rag\\data\\eval\\formal_questions.jsonl",
   "dataset_sha256": "d3e2c8817b3c3274ea1b8151d6a73a237f607f000c3825bac44bdabc78b11f58",
   "split": "development",
@@ -21,8 +21,8 @@
     "gold_in_top5_not_top1": 4
   },
   "latency_ms": {
-    "p50": 305.6,
-    "p95": 841.02
+    "p50": 339.01,
+    "p95": 410.62
   },
   "gold_missing_top5": [],
   "gold_in_top5_not_top1": [
