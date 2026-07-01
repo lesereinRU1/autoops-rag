@@ -1,0 +1,730 @@
+{
+  "evaluation_type": "ranking_only_eval",
+  "generated_at": "2026-07-01T21:36:41+08:00",
+  "dataset": "D:\\autoops-rag\\data\\eval\\formal_questions.jsonl",
+  "dataset_sha256": "c91d1111871815f7840a55faffdbfbb3b1a61675ef761442d9d5b66074ff55b1",
+  "split": "development",
+  "strategy": "hybrid",
+  "run_mode": "api",
+  "retrieval_endpoint": "/api/search",
+  "external_llm_called": false,
+  "chat_endpoint_called": false,
+  "answers_generated": false,
+  "answerable_questions": 25,
+  "skipped_non_answerable_questions": 5,
+  "metrics": {
+    "strict_recall@5": 1.0,
+    "mrr@5": 0.908,
+    "ndcg@5": 0.9318,
+    "top1_accuracy": 0.84,
+    "gold_missing_top5": 0,
+    "gold_in_top5_not_top1": 4
+  },
+  "latency_ms": {
+    "p50": 759.13,
+    "p95": 800.2
+  },
+  "gold_missing_top5": [],
+  "gold_in_top5_not_top1": [
+    {
+      "question_id": "formal_004",
+      "question": "S7-1200 与 Modbus 通信不上时，应该按哪些层次排查？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.2,
+      "ndcg@5": 0.38685280723454163,
+      "top1_correct": false,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_009",
+      "question": "现场把手册里的 40001 直接填进 Modbus TCP 报文地址后读数不对，应该先核对什么？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6309297535714575,
+      "top1_correct": false,
+      "initial_reason": "ranking_late"
+    },
+    {
+      "question_id": "formal_024",
+      "question": "PLC 和对端可以互相 ping 通，但 MB_CLIENT 仍然通信失败，下一步应检查什么？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8153",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1058_8882",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6309297535714575,
+      "top1_correct": false,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_027",
+      "question": "如何根据 STATUS 和现场现象区分通信伙伴超时与 CONNECT 连接描述错误，并安排排查顺序？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0004": 2,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 4,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6797310500037655,
+      "top1_correct": false,
+      "initial_reason": "query_too_broad"
+    }
+  ],
+  "details": [
+    {
+      "question_id": "formal_001",
+      "question": "为什么设备手册写40001，而Modbus TCP报文地址常从0开始？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_002",
+      "question": "S7-1200 使用 Modbus 通信时出现 16#80C8，应该优先排查哪些方向？",
+      "category": "alarm_code",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_003",
+      "question": "Modbus 读取 32 位数值时，为什么不能只凭数值看起来接近就判断字节序正确？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_004",
+      "question": "S7-1200 与 Modbus 通信不上时，应该按哪些层次排查？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.2,
+      "ndcg@5": 0.38685280723454163,
+      "top1_correct": false,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_005",
+      "question": "排查 S7-1200 的 MB_CLIENT 或 MB_SERVER 通信问题时，CONNECT 参数和调用状态应该检查哪些内容？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_008",
+      "question": "这个 AutoOps RAG 项目能不能代替 Siemens 原始手册、功能安全评估或现场工程师判断？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_中文操作与安全边界_a52df96344_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_009",
+      "question": "现场把手册里的 40001 直接填进 Modbus TCP 报文地址后读数不对，应该先核对什么？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6309297535714575,
+      "top1_correct": false,
+      "initial_reason": "ranking_late"
+    },
+    {
+      "question_id": "formal_011",
+      "question": "排查 S7-1200 与 Modbus TCP 通信失败时，为什么要核对 TCP 端口，而不能只靠默认端口或经验判断？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0001": 4,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 2,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 0.9674679834891693,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_024",
+      "question": "PLC 和对端可以互相 ping 通，但 MB_CLIENT 仍然通信失败，下一步应检查什么？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8153",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1058_8882",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6309297535714575,
+      "top1_correct": false,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_026",
+      "question": "读取到的 32 位浮点数看起来差不多，但数值仍不稳定，应该怎样验证寄存器顺序？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9619",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9647"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 1,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_027",
+      "question": "如何根据 STATUS 和现场现象区分通信伙伴超时与 CONNECT 连接描述错误，并安排排查顺序？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0004": 2,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 4,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 0.5,
+      "ndcg@5": 0.6797310500037655,
+      "top1_correct": false,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_028",
+      "question": "在把 Modbus 只读测试改为写寄存器请求之前，应完成哪些数据核对和安全边界确认？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 1,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 2,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 3,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 4,
+        "autoops_中文操作与安全边界_a52df96344_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_025",
+      "question": "MB_CLIENT 偶尔成功、偶尔报错，而且程序在 BUSY 时仍反复触发 REQ，这种情况该怎样排查？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0005": 1,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 2,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 3,
+        "autoops_故障排查流程_3b38e4eccb_0001_0001": 4
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_012",
+      "question": "为什么排查 Modbus 读写失败时要核对功能码和对象类型是否匹配？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_013",
+      "question": "Modbus 请求的起始地址、数据长度和接收缓冲区为什么要一起核对？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_031",
+      "question": "发生 S7-1200 与 Modbus 通信故障后，为什么要先记录 CPU 型号、固件版本、通信块版本和在线状态？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_032",
+      "question": "如果用户没有提供固件版本、通信块版本和 STATUS 在线值，系统应该直接给出唯一故障原因吗？",
+      "category": "version_conflict",
+      "gold_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_中文操作与安全边界_a52df96344_0001_0002": 1,
+        "autoops_故障排查流程_3b38e4eccb_0001_0001": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_033",
+      "question": "为什么 AutoOps RAG 的回答必须带文档名、页码和 chunk_id？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0004",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_中文操作与安全边界_a52df96344_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_034",
+      "question": "手册中的 4xxxx 参考编号、十进制偏移和十六进制地址混在一起时，为什么必须记录换算规则？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_035",
+      "question": "为什么排查 Modbus 读写异常时，不能只看地址，还要核对功能码和对象类型？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_036",
+      "question": "为什么 Modbus 请求的数据长度和接收缓冲区容量、数据类型需要一起检查？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_037",
+      "question": "为什么 32 位 Modbus 数值要用已知测试值验证 ABCD、BADC、CDAB、DCBA 等排列？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_038",
+      "question": "为什么 MB_CLIENT 上一条请求仍处于 BUSY 时，不应该持续触发新的 REQ 上升沿？",
+      "category": "cross_section_procedure",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0936_8091",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8161"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0005": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_039",
+      "question": "STATUS 为 16#80C8 时，为什么应优先核对对端运行状态、监听接口、网络可达性、端口、Unit ID 和请求范围？",
+      "category": "alarm_code",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_040",
+      "question": "STATUS 为 16#809A 时，为什么要核对 CONNECT 变量的数据类型、字段和接口标识？",
+      "category": "alarm_code",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "top5_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0607_6907"
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0004": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    }
+  ],
+  "disclaimer": "本报告是ranking-only eval，不调用外部LLM，不代表最终生成质量。"
+}
