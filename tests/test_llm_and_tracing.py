@@ -103,6 +103,7 @@ def test_generator_success_is_grounded_and_records_calls():
     class FakeClient:
         def generate(self, prompt: str, retries: int = 1) -> LLMResult:
             assert "evidence 是唯一事实来源" in prompt
+            assert "每一行只有一个事实和一个来源" in prompt
             return LLMResult(
                 content=(
                     "1. 结论\n40001是参考编号。[来源1]\n"

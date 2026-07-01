@@ -1,5 +1,5 @@
 from app.agent.memory import MemoryStore
-from app.generation.citation_guard import validate_citations
+from app.generation.citation_guard import validate_citations, validate_grounded_citations
 from app.models import Chunk, SearchHit
 
 
@@ -14,6 +14,31 @@ def test_alarm_seed_and_citation_guard(tmp_path):
     assert ok and not warnings
     ok, warnings = validate_citations("结论 [来源2：不存在]", [item])
     assert not ok and warnings
+
+
+def test_grounded_citation_guard_requires_one_adjacent_source_per_atomic_claim():
+    evidence = [
+        SearchHit(chunk=Chunk(chunk_id="c1", doc_id="d", doc_name="手册", text="事实一"), score=1),
+        SearchHit(chunk=Chunk(chunk_id="c2", doc_id="d", doc_name="手册", text="事实二"), score=1),
+    ]
+    valid = (
+        "1. 结论\n- 事实一。[来源1]\n"
+        "2. 原因\n- 事实二。[来源2]\n"
+        "3. 排查 / 换算建议\n- 核对事实一。[来源1]\n"
+        "4. 引用来源\n5. 安全提示\n"
+    )
+    ok, warnings = validate_grounded_citations(valid, evidence)
+    assert ok and not warnings
+
+    broad = valid.replace("事实一。[来源1]", "事实一和事实二。[来源1][来源2]", 1)
+    ok, warnings = validate_grounded_citations(broad, evidence)
+    assert not ok
+    assert any("只能引用一个" in warning for warning in warnings)
+
+    uncited = valid.replace("事实二。[来源2]", "事实二。", 1)
+    ok, warnings = validate_grounded_citations(uncited, evidence)
+    assert not ok
+    assert any("没有来源编号" in warning for warning in warnings)
 
 
 def test_graph_feedback_and_verified_solution_loop(tmp_path):

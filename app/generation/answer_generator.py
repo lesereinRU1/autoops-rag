@@ -8,6 +8,7 @@ from app.ingestion.semantic_chunker import tokenize
 from app.models import SearchHit
 from app.retrieval.query_expansion import expand_query, technical_terms
 from app.generation.llm_client import LLMClient, LLMClientError
+from app.generation.citation_guard import validate_grounded_citations
 
 
 @dataclass
@@ -169,10 +170,34 @@ class AnswerGenerator:
         )
 
     @staticmethod
-    def _valid_grounded_format(answer: str) -> bool:
+    def _valid_grounded_format(answer: str, evidence: list[SearchHit]) -> bool:
         required = ("1. 结论", "2. 原因", "3. 排查 / 换算建议", "4. 引用来源", "5. 安全提示")
-        return all(title in answer for title in required) and bool(
+        if not all(title in answer for title in required) or not bool(
             re.search(r"\[来源\d+[^\]]*\]", answer)
+        ):
+            return False
+        return validate_grounded_citations(answer, evidence)[0]
+
+    @staticmethod
+    def _sum_usage(first: int | None, second: int | None) -> int | None:
+        return first + second if first is not None and second is not None else None
+
+    @classmethod
+    def _repair_prompt(
+        cls,
+        original_prompt: str,
+        draft: str,
+        warnings: list[str],
+    ) -> str:
+        return (
+            f"{original_prompt}\n\n"
+            "下面是一个未通过引用结构校验的回答草稿。只允许删除、拆句、缩短或补上草稿中已有事实对应的来源编号；"
+            "禁止加入任何新参数、编号、默认值、测试值、版本、状态码解释或操作步骤。\n"
+            "修复要求：1至3节的每一行只能有一个短事实句，只能引用一个[来源N]，来源必须紧邻句末；"
+            "禁止在一行中使用分号拼接事实，禁止使用[来源1-3]或一行挂多个来源。"
+            "如果无法确认，删除该事实，保留五个固定标题。\n"
+            f"校验问题：{'; '.join(warnings)}\n"
+            f"待修复草稿：\n{draft}"
         )
 
     @classmethod
@@ -245,49 +270,99 @@ class AnswerGenerator:
             "找不到直接支撑的句子必须删除，或改写为“当前证据只能说明……，无法确认……”。\n\n"
             "硬性规则：\n"
             "- 禁止补充 evidence 中没有的 Siemens 参数名、参数默认值、状态码含义、版本信息、章节名称、因果解释或操作步骤。\n"
-            "- 禁止把不同 chunk 的零散信息拼成 evidence 没有明确给出的新规则。\n"
-            "- 每个关键事实句末必须写精确的 [来源N]；该来源必须直接支撑整句话，不能用 [来源1-5] 代替精确引用。\n"
-            "- 每个事实句最多包含一个核心事实、最多引用两个来源；引用必须紧挨该句并放在句号前，禁止在整段末尾统一挂多个来源。\n"
-            "- 禁止使用“通常”“一般”“可能”“典型”“必然”“不影响”等词扩展证据，除非被引用 evidence 中明确出现这些含义。\n"
+            "- 禁止把不同 chunk 的零散信息合并成一个事实句；多个 chunk 各支持一部分时，必须拆成多行短句。\n"
+            "- 1至3节每一行只能写一个核心事实，并且只能引用一个精确的 [来源N]；该来源必须直接支撑整行。\n"
+            "- 引用必须紧挨该行句末。禁止 [来源1-5]，禁止一行挂多个来源，禁止在段末统一挂来源。\n"
+            "- 事实行禁止使用分号连接多个检查项；每个检查项单独一行、单独引用。\n"
+            "- 禁止使用“通常”“一般”“可能”“默认”“建议直接”“应该是”“典型”“必然”“不影响”等扩展性措辞；不要为追求完整而补充证据外内容。\n"
+            "- 用户问题中出现但 evidence 未直接出现的字段、参数、指令名、编号、版本、状态码或测试值，同样禁止写入答案。\n"
             "- 证据只能支持部分结论时，必须写“当前证据只能说明……”，并明确无法确认的内容。\n"
             "- 只说明回答当前问题所必需的证据缺口，不要罗列用户未问的协议、版本、参数或操作可能性。\n"
             "- 排查建议只能改写 evidence 已明确列出的检查项；evidence 未给出执行步骤时，不得自行补步骤。\n"
             "- 涉及强制输出、旁路联锁、停机、上电、接线或写入设备参数，只能指出证据中的核对项和手册位置，禁止给直接执行步骤。\n"
             "- 只引用与问题直接相关的来源，每节保持简洁，全文控制在700个汉字左右。\n\n"
-            "必须严格使用以下五个标题，不得增加或改名：\n"
-            "1. 结论\n2. 原因\n3. 排查 / 换算建议\n4. 引用来源\n5. 安全提示\n\n"
+            "必须严格使用以下五个标题，不得增加或改名。1至3节使用短横线列表，每一行只有一个事实和一个来源：\n"
+            "1. 结论\n- 一个短事实。[来源N]\n"
+            "2. 原因\n- 一个短事实。[来源N]\n"
+            "3. 排查 / 换算建议\n- 一个核对项。[来源N]\n"
+            "4. 引用来源\n5. 安全提示\n\n"
             f"用户问题：{query}\n"
             f"注入证据：\n{context}"
         )
         try:
             result = self.llm.generate(prompt, retries=1)
-            if not self._valid_grounded_format(result.content):
+            answer = result.content
+            citation_ok, citation_warnings = validate_grounded_citations(answer, evidence)
+            calls = result.calls
+            input_tokens = result.input_tokens
+            output_tokens = result.output_tokens
+            total_tokens = result.total_tokens
+            token_usage_available = result.token_usage_available
+            token_usage_missing_reason = result.token_usage_missing_reason
+            first_token_latency_ms = result.first_token_latency_ms
+            total_latency_ms = result.total_latency_ms
+            if not self._valid_grounded_format(answer, evidence):
+                try:
+                    repaired = self.llm.generate(
+                        self._repair_prompt(prompt, answer, citation_warnings), retries=0
+                    )
+                except LLMClientError as exc:
+                    return GenerationOutcome(
+                        answer=self._extractive(query, evidence, prefix),
+                        mode="local_extractive",
+                        external_calls=calls + exc.attempts,
+                        model=result.model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        total_tokens=total_tokens,
+                        token_usage_available=token_usage_available,
+                        token_usage_missing_reason=token_usage_missing_reason,
+                        first_token_latency_ms=first_token_latency_ms,
+                        total_latency_ms=total_latency_ms,
+                        fallback_reason=exc.reason,
+                    )
+                answer = repaired.content
+                calls += repaired.calls
+                input_tokens = self._sum_usage(input_tokens, repaired.input_tokens)
+                output_tokens = self._sum_usage(output_tokens, repaired.output_tokens)
+                total_tokens = self._sum_usage(total_tokens, repaired.total_tokens)
+                token_usage_available = (
+                    token_usage_available and repaired.token_usage_available
+                )
+                token_usage_missing_reason = (
+                    "" if token_usage_available else repaired.token_usage_missing_reason
+                    or token_usage_missing_reason
+                )
+                if first_token_latency_ms is None:
+                    first_token_latency_ms = repaired.first_token_latency_ms
+                total_latency_ms += repaired.total_latency_ms
+            if not self._valid_grounded_format(answer, evidence):
                 return GenerationOutcome(
                     answer=self._extractive(query, evidence, prefix),
                     mode="local_extractive",
-                    external_calls=result.calls,
+                    external_calls=calls,
                     model=result.model,
-                    input_tokens=result.input_tokens,
-                    output_tokens=result.output_tokens,
-                    total_tokens=result.total_tokens,
-                    token_usage_available=result.token_usage_available,
-                    token_usage_missing_reason=result.token_usage_missing_reason,
-                    first_token_latency_ms=result.first_token_latency_ms,
-                    total_latency_ms=result.total_latency_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    token_usage_available=token_usage_available,
+                    token_usage_missing_reason=token_usage_missing_reason,
+                    first_token_latency_ms=first_token_latency_ms,
+                    total_latency_ms=total_latency_ms,
                     fallback_reason="llm_invalid_response",
                 )
             return GenerationOutcome(
-                answer=self._normalize_reference_section(result.content, evidence),
+                answer=self._normalize_reference_section(answer, evidence),
                 mode="llm_grounded",
-                external_calls=result.calls,
+                external_calls=calls,
                 model=result.model,
-                input_tokens=result.input_tokens,
-                output_tokens=result.output_tokens,
-                total_tokens=result.total_tokens,
-                token_usage_available=result.token_usage_available,
-                token_usage_missing_reason=result.token_usage_missing_reason,
-                first_token_latency_ms=result.first_token_latency_ms,
-                total_latency_ms=result.total_latency_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                token_usage_available=token_usage_available,
+                token_usage_missing_reason=token_usage_missing_reason,
+                first_token_latency_ms=first_token_latency_ms,
+                total_latency_ms=total_latency_ms,
             )
         except LLMClientError as exc:
             return GenerationOutcome(

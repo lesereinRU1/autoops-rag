@@ -7,6 +7,47 @@ from app.models import SearchHit
 
 CHUNK_ID_PATTERN = re.compile(r"\|\s*([^\]|]+)\]")
 SOURCE_INDEX_PATTERN = re.compile(r"\[来源\s*(\d+)(?:[:：][^\]]*)?\]")
+NARRATIVE_PATTERN = re.compile(r"1\. 结论(.*?)4\. 引用来源", re.S)
+
+
+def grounded_claims(answer: str) -> list[str]:
+    """Return atomic claims from sections 1-3; the source manifest is excluded."""
+    match = NARRATIVE_PATTERN.search(answer)
+    if not match:
+        return []
+    narrative = re.sub(
+        r"(?:^|\n)\s*[123]\.\s*(?:结论|原因|排查\s*/\s*换算建议)\s*",
+        "\n",
+        match.group(1),
+    )
+    claims: list[str] = []
+    for part in re.split(r"(?<=[。！？；;])\s*(?!\[来源)|\n+", narrative):
+        value = part.strip(" -•\t")
+        plain = SOURCE_INDEX_PATTERN.sub("", value).strip(" 。；;\t")
+        if len(plain) >= 3:
+            claims.append(value)
+    return claims
+
+
+def validate_grounded_citations(
+    answer: str, evidence: list[SearchHit]
+) -> tuple[bool, list[str]]:
+    """Require one precise, adjacent source citation for every factual claim."""
+    warnings: list[str] = []
+    claims = grounded_claims(answer)
+    if not claims:
+        return False, ["回答的结论、原因和排查建议中没有可校验的事实句。"]
+    for position, claim in enumerate(claims, start=1):
+        indexes = [int(value) for value in SOURCE_INDEX_PATTERN.findall(claim)]
+        valid = [index for index in indexes if 1 <= index <= len(evidence)]
+        if not indexes:
+            warnings.append(f"第{position}条事实句没有来源编号。")
+            continue
+        if len(set(valid)) != 1 or len(indexes) != 1:
+            warnings.append(f"第{position}条事实句必须且只能引用一个有效来源。")
+        if not re.search(r"\[来源\s*\d+(?:[:：][^\]]*)?\]\s*[。！？；;]?$", claim):
+            warnings.append(f"第{position}条事实句的来源编号必须紧邻句末。")
+    return not warnings, warnings
 
 
 def validate_citations(answer: str, evidence: list[SearchHit]) -> tuple[bool, list[str]]:

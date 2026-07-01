@@ -70,7 +70,9 @@ IDENTIFIER_PATTERN = re.compile(
 VERSION_PATTERN = re.compile(r"(?<![A-Za-z0-9])V\d+(?:\.\d+)+(?![A-Za-z0-9])", re.I)
 STATUS_PATTERN = re.compile(r"(?:16#|0x)[0-9A-Fa-f]{2,8}", re.I)
 NUMBER_PATTERN = re.compile(r"(?<![A-Za-z0-9_])\d[\d,]*(?:\.\d+)?(?![A-Za-z0-9_])")
-GENERALIZATION_TERMS = ("通常", "一般", "可能", "典型", "必然", "不影响")
+GENERALIZATION_TERMS = (
+    "通常", "一般", "可能", "默认", "建议直接", "应该是", "典型", "必然", "不影响"
+)
 IDENTIFIER_ALIASES = {
     "interfaceid": ("interfaceid", "接口标识", "hardware identifier"),
     "status": ("status", "状态", "状态字"),
@@ -258,7 +260,7 @@ def claim_sentences(answer: str) -> list[str]:
         return []
     narrative = re.sub(r"\n\s*[23]\. (?:原因|排查 / 换算建议)\s*", "\n", match.group(1))
     claims: list[str] = []
-    for part in re.split(r"(?<=[。！？])\s*(?!\[来源)|\n+", narrative):
+    for part in re.split(r"(?<=[。！？；;])\s*(?!\[来源)|\n+", narrative):
         value = part.strip(" -•\t")
         plain = re.sub(r"\[来源[^\]]+\]", "", value).strip()
         if len(plain) >= 8:
@@ -349,19 +351,9 @@ def evaluate_claims(
             elif unsupported_terms:
                 category = "prompt_overgeneralization"
                 reason = "回答使用了证据未直接出现的扩展性措辞：" + "、".join(unsupported_terms)
-            elif len(indexes) >= 3 and not any(
-                not _missing_claim_values(
-                    plain_claim,
-                    " ".join((
-                        str(item.get("doc_name", "")),
-                        " ".join(item.get("section_path", [])),
-                        str(item.get("text", "")),
-                    )),
-                )
-                for item in cited
-            ):
+            elif len(indexes) > 1:
                 category = "citation_too_broad"
-                reason = "事实由多个chunk拼接支持，但没有单个chunk直接支撑整句"
+                reason = "一个事实句引用了多个chunk；应拆成由单一chunk直接支撑的短句"
         counts_as_unsupported = category not in ("", "checker_false_positive")
         supported = not counts_as_unsupported
         item = {
