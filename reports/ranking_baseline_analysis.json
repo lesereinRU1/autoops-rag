@@ -1,0 +1,170 @@
+{
+  "analysis_type": "ranking_baseline_analysis",
+  "analysis_stage": "baseline_only_no_ranking_changes",
+  "source_dataset": "data/eval/formal_questions.jsonl",
+  "source_report": "reports/formal_evaluation.json",
+  "source_report_generated_at": "2026-07-01T20:57:45+08:00",
+  "external_llm_called": false,
+  "formal_evaluation_modified": false,
+  "metrics": {
+    "strict_recall@5": 0.92,
+    "mrr@5": 0.888,
+    "ndcg@5": 0.9073,
+    "top1_accuracy": 0.8
+  },
+  "denominators": {
+    "answerable_questions": 25,
+    "all_gold_in_top5": 23,
+    "top1_gold_hit": 20,
+    "questions_with_at_least_one_gold_missing_from_top5": 2,
+    "questions_with_all_gold_in_top5_but_gold_not_top1": 4
+  },
+  "definitions": {
+    "gold_not_in_top5": "题目至少有一个人工 gold_chunk_id 未出现在 actual_top_chunks 前5名中。多 gold 题要求全部 gold 进入 Top5，才满足 strict_recall@5。",
+    "gold_in_top5_but_not_top1": "题目的全部 gold 均进入 Top5，但第1名不是 gold。",
+    "retrieval_mode": "取自 formal_evaluation.json 的 selected_tool；该报告没有保存 Dense、BM25、RRF 各自候选排名，因此本分析不推断分阶段归因。"
+  },
+  "gold_not_in_top5": [
+    {
+      "question_id": "formal_027",
+      "question": "如何根据 STATUS 和现场现象区分通信伙伴超时与 CONNECT 连接描述错误，并安排排查顺序？",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0005", "is_gold": false},
+        {"rank": 2, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0004", "is_gold": true},
+        {"rank": 3, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0001", "is_gold": false},
+        {"rank": 4, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": true},
+        {"rank": 5, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0002", "is_gold": true}
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0004": 2,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 4,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5,
+        "autoops_中文操作与安全边界_a52df96344_0001_0002": null
+      },
+      "retrieval_mode": "search_manual",
+      "initial_reason": "query_too_broad",
+      "reason_notes": "问题同时要求区分两个 STATUS 场景并给出跨章节排查顺序。三个故障排查 gold 已进入 Top5，但安全边界 gold 被同主题的现场状态和请求触发 chunk 挤出。"
+    },
+    {
+      "question_id": "formal_028",
+      "question": "在把 Modbus 只读测试改为写寄存器请求之前，应完成哪些数据核对和安全边界确认？",
+      "gold_chunk_ids": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": true},
+        {"rank": 2, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003", "is_gold": true},
+        {"rank": 3, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004", "is_gold": true},
+        {"rank": 4, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002", "is_gold": true},
+        {"rank": 5, "chunk_id": "autoops_中文操作与安全边界_a52df96344_0001_0002", "is_gold": false}
+      ],
+      "gold_rank": {
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 1,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 2,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 3,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 4,
+        "autoops_故障排查流程_3b38e4eccb_0001_0005": null
+      },
+      "retrieval_mode": "search_manual",
+      "initial_reason": "gold_label_question_mismatch",
+      "reason_notes": "缺失 gold 主要描述 BUSY、REQ 与并发排队，而题目 required_facts 聚焦写入前的数据核对和安全边界。实际 Top5 的安全边界 chunk 与题意更直接，建议先人工复核标签，不能据此直接调排序。"
+    }
+  ],
+  "gold_in_top5_but_not_top1": [
+    {
+      "question_id": "formal_001",
+      "question": "为什么设备手册写40001，而Modbus TCP报文地址常从0开始？",
+      "gold_chunk_ids": ["autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004", "is_gold": false},
+        {"rank": 2, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001", "is_gold": true},
+        {"rank": 3, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": false},
+        {"rank": 4, "chunk_id": "autoops_中文操作与安全边界_a52df96344_0001_0001", "is_gold": false},
+        {"rank": 5, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0002", "is_gold": false}
+      ],
+      "gold_rank": {"autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 2},
+      "retrieval_mode": "search_manual",
+      "initial_reason": "chunk_text_too_similar",
+      "reason_notes": "Top1 与 gold 来自同一地址与数据检查文档，但命中的是字节序章节；主题词高度接近，正确地址表示章节排在第2。"
+    },
+    {
+      "question_id": "formal_004",
+      "question": "S7-1200 与 Modbus 通信不上时，应该按哪些层次排查？",
+      "gold_chunk_ids": ["autoops_故障排查流程_3b38e4eccb_0001_0002"],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0005", "is_gold": false},
+        {"rank": 2, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": false},
+        {"rank": 3, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0001", "is_gold": false},
+        {"rank": 4, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0004", "is_gold": false},
+        {"rank": 5, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0002", "is_gold": true}
+      ],
+      "gold_rank": {"autoops_故障排查流程_3b38e4eccb_0001_0002": 5},
+      "retrieval_mode": "search_manual",
+      "initial_reason": "query_too_broad",
+      "reason_notes": "“通信不上”和“哪些层次”覆盖整份故障排查资料，同文档中的并发、状态码和现场记录 chunk 均参与竞争，分层排查 gold 到第5名才出现。"
+    },
+    {
+      "question_id": "formal_009",
+      "question": "现场把手册里的 40001 直接填进 Modbus TCP 报文地址后读数不对，应该先核对什么？",
+      "gold_chunk_ids": ["autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": false},
+        {"rank": 2, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001", "is_gold": true},
+        {"rank": 3, "chunk_id": "autoops_中文操作与安全边界_a52df96344_0001_0001", "is_gold": false},
+        {"rank": 4, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003", "is_gold": false},
+        {"rank": 5, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0004", "is_gold": false}
+      ],
+      "gold_rank": {"autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 2},
+      "retrieval_mode": "search_manual",
+      "initial_reason": "ranking_late",
+      "reason_notes": "地址表示 gold 已在第2名且直接覆盖 40001 与零基偏移；当前报告没有分阶段候选分数，无法再归因到 Dense、BM25 或融合环节。"
+    },
+    {
+      "question_id": "formal_024",
+      "question": "PLC 和对端可以互相 ping 通，但 MB_CLIENT 仍然通信失败，下一步应检查什么？",
+      "gold_chunk_ids": ["autoops_故障排查流程_3b38e4eccb_0001_0002"],
+      "actual_top_chunks": [
+        {"rank": 1, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0003", "is_gold": false},
+        {"rank": 2, "chunk_id": "autoops_故障排查流程_3b38e4eccb_0001_0002", "is_gold": true},
+        {"rank": 3, "chunk_id": "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8153", "is_gold": false},
+        {"rank": 4, "chunk_id": "siemens_s7_1200_system_manual_v4_6_5513d52763_1058_8882", "is_gold": false},
+        {"rank": 5, "chunk_id": "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004", "is_gold": false}
+      ],
+      "gold_rank": {"autoops_故障排查流程_3b38e4eccb_0001_0002": 2},
+      "retrieval_mode": "search_manual",
+      "initial_reason": "chunk_text_too_similar",
+      "reason_notes": "Top1 和 gold 都是通信失败排查内容；Top1 强调通信伙伴未响应及网络可达性，gold 才是分层检查，因此相邻故障语义发生竞争。"
+    }
+  ],
+  "reason_distribution": {
+    "retrieval_miss": 0,
+    "ranking_late": 1,
+    "query_too_broad": 2,
+    "chunk_text_too_similar": 2,
+    "gold_label_question_mismatch": 1,
+    "metadata_filter_issue": 0
+  },
+  "recommendations_without_implementation": [
+    "先人工复核 formal_028 的缺失 gold 是否与 question 和 required_facts 对齐；标签未确认前不要用该题驱动排序调整。",
+    "为 query_too_broad 样本设计离线单变量实验，例如查询拆分或章节意图识别，但保持当前 baseline 不变并使用同一数据集比较。",
+    "对 chunk_text_too_similar 样本记录章节路径、标题命中和各阶段候选排名，确认问题发生在召回还是融合排序后再决定方案。",
+    "对 ranking_late 样本补充只读的 Dense、BM25、RRF 分阶段诊断输出；不要在缺少分阶段证据时直接调整权重。",
+    "后续每次只改变一个排序因素，并同时观察 strict_recall@5、MRR@5、nDCG@5 和 Top1 Accuracy，避免只优化单一指标。"
+  ],
+  "limitations": [
+    "本阶段只是 ranking baseline 分析，不是排序优化。",
+    "分析只使用现有人工 gold 和已完成 formal evaluation 的 Top5 结果，没有运行时生成 gold。",
+    "formal_evaluation.json 未保存 Dense、BM25、RRF 各阶段排名和分数，因此初判原因不是因果结论。",
+    "本报告没有调用外部 LLM，也没有修改 reports/formal_evaluation.json。"
+  ]
+}
