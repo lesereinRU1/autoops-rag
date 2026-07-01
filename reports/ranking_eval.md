@@ -5,7 +5,7 @@
 - 运行模式：`api`
 - 检索策略：`hybrid`
 - Split：`development`
-- 可回答题：25
+- 可回答题：35
 - 跳过不可回答/危险题：5
 
 ## Metrics
@@ -13,9 +13,9 @@
 | Metric | Value |
 |---|---:|
 | Strict Recall@5 | 1.0000 |
-| MRR@5 | 0.9080 |
-| nDCG@5 | 0.9318 |
-| Top1 Accuracy | 0.8400 |
+| MRR@5 | 0.9343 |
+| nDCG@5 | 0.9377 |
+| Top1 Accuracy | 0.8857 |
 | Gold missing Top5 | 0 |
 | Gold in Top5 but not Top1 | 4 |
 

@@ -1,8 +1,8 @@
 {
   "evaluation_type": "ranking_only_eval",
-  "generated_at": "2026-07-01T21:36:41+08:00",
+  "generated_at": "2026-07-01T22:52:18+08:00",
   "dataset": "D:\\autoops-rag\\data\\eval\\formal_questions.jsonl",
-  "dataset_sha256": "c91d1111871815f7840a55faffdbfbb3b1a61675ef761442d9d5b66074ff55b1",
+  "dataset_sha256": "d3e2c8817b3c3274ea1b8151d6a73a237f607f000c3825bac44bdabc78b11f58",
   "split": "development",
   "strategy": "hybrid",
   "run_mode": "api",
@@ -10,19 +10,19 @@
   "external_llm_called": false,
   "chat_endpoint_called": false,
   "answers_generated": false,
-  "answerable_questions": 25,
+  "answerable_questions": 35,
   "skipped_non_answerable_questions": 5,
   "metrics": {
     "strict_recall@5": 1.0,
-    "mrr@5": 0.908,
-    "ndcg@5": 0.9318,
-    "top1_accuracy": 0.84,
+    "mrr@5": 0.9343,
+    "ndcg@5": 0.9377,
+    "top1_accuracy": 0.8857,
     "gold_missing_top5": 0,
     "gold_in_top5_not_top1": 4
   },
   "latency_ms": {
-    "p50": 759.13,
-    "p95": 800.2
+    "p50": 305.6,
+    "p95": 841.02
   },
   "gold_missing_top5": [],
   "gold_in_top5_not_top1": [
@@ -724,6 +724,248 @@
       "ndcg@5": 1.0,
       "top1_correct": true,
       "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_041",
+      "question": "设备寄存器表写 40001 时，如何判断应换算为报文地址 0，还是保留文档给出的原值？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1,
+        "autoops_中文操作与安全边界_a52df96344_0001_0002": 4
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 0.8772153153380493,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_042",
+      "question": "同一份寄存器资料同时出现 4xxxx 参考编号、十进制偏移和十六进制地址时，应如何区分三种表示？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_043",
+      "question": "读取结果落在目标寄存器的相邻位置时，应如何核对零基数据地址与手册参考编号之间的偏移？",
+      "category": "natural_language_rewrite",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_044",
+      "question": "网关侧使用 40001、PLC 程序侧使用 0 时，应怎样记录地址换算规则，避免重复加一或减一？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001": 1,
+        "autoops_中文操作与安全边界_a52df96344_0001_0002": 4
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 0.8772153153380493,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_045",
+      "question": "读保持寄存器和读输入寄存器为什么不能只因地址相同就使用同一种功能码？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_046",
+      "question": "设备对象是线圈、离散输入、输入寄存器或保持寄存器时，应如何选择匹配的读写操作？",
+      "category": "table_query",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "chunk_text_too_similar"
+    },
+    {
+      "question_id": "formal_047",
+      "question": "写单个保持寄存器的请求被拒绝时，应如何核对对象类型、功能码和设备支持范围？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 5
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 0.8503449055347546,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_048",
+      "question": "抓包中的功能码与设备寄存器表标注的对象类型不一致时，应从哪些资料字段开始核对？",
+      "category": "table_query",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002": 1,
+        "autoops_故障排查流程_3b38e4eccb_0001_0002": 3
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 0.9197207891481876,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_049",
+      "question": "起始地址正确但批量读取失败时，为什么还要核对请求长度和对端寄存器范围？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 1,
+        "autoops_故障排查流程_3b38e4eccb_0001_0003": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
+    },
+    {
+      "question_id": "formal_050",
+      "question": "32 位数据跨两个寄存器时，应如何核对读取数量、数据类型和接收缓冲区容量？",
+      "category": "official_parameter",
+      "gold_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "top5_chunk_ids": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "gold_rank": {
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003": 1,
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004": 2
+      },
+      "strict_recall@5": 1.0,
+      "reciprocal_rank@5": 1.0,
+      "ndcg@5": 1.0,
+      "top1_correct": true,
+      "initial_reason": "query_too_broad"
     }
   ],
   "disclaimer": "本报告是ranking-only eval，不调用外部LLM，不代表最终生成质量。"
