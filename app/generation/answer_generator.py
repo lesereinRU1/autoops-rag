@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.config import Settings
 from app.ingestion.semantic_chunker import tokenize
@@ -25,17 +25,21 @@ class GenerationOutcome:
     first_token_latency_ms: float | None = None
     total_latency_ms: float = 0.0
     fallback_reason: str = ""
+    attempted_models: list[str] = field(default_factory=list)
+    final_model: str = ""
 
 
 class AnswerGenerator:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.primary_model = settings.llm_primary_model
         self.llm = (
             LLMClient(
                 settings.llm_base_url,
                 settings.llm_api_key,
-                settings.llm_model,
+                self.primary_model,
                 settings.llm_timeout_seconds,
+                fallback_models=settings.llm_model_candidates[1:],
             )
             if settings.llm_enabled and settings.llm_base_url and settings.llm_api_key
             else None
@@ -244,7 +248,7 @@ class AnswerGenerator:
             return GenerationOutcome(
                 answer=self._extractive(query, evidence, prefix),
                 mode="local_extractive",
-                model=self.settings.llm_model,
+                model=self.primary_model,
                 token_usage_missing_reason="evidence_insufficient",
                 fallback_reason="evidence_insufficient",
             )
@@ -252,7 +256,7 @@ class AnswerGenerator:
             return GenerationOutcome(
                 answer=self._extractive(query, evidence, prefix),
                 mode="local_extractive",
-                model=self.settings.llm_model,
+                model=self.primary_model,
                 token_usage_missing_reason="llm_disabled",
                 fallback_reason="llm_disabled",
             )
@@ -260,7 +264,7 @@ class AnswerGenerator:
             return GenerationOutcome(
                 answer=self._extractive(query, evidence, prefix),
                 mode="local_extractive",
-                model=self.settings.llm_model,
+                model=self.primary_model,
                 token_usage_missing_reason="llm_invalid_config",
                 fallback_reason="llm_invalid_config",
             )
@@ -306,6 +310,9 @@ class AnswerGenerator:
             token_usage_missing_reason = result.token_usage_missing_reason
             first_token_latency_ms = result.first_token_latency_ms
             total_latency_ms = result.total_latency_ms
+            attempted_models = list(result.attempted_models)
+            final_model = result.final_model or result.model
+            model_fallback_reason = result.fallback_reason
             if not self._valid_grounded_format(answer, evidence):
                 try:
                     repaired = self.llm.generate(
@@ -316,18 +323,23 @@ class AnswerGenerator:
                         answer=self._extractive(query, evidence, prefix),
                         mode="local_extractive",
                         external_calls=calls + exc.attempts,
-                        model=result.model,
+                        model=exc.final_model or final_model or result.model,
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
                         total_tokens=total_tokens,
                         token_usage_available=token_usage_available,
                         token_usage_missing_reason=token_usage_missing_reason,
                         first_token_latency_ms=first_token_latency_ms,
-                        total_latency_ms=total_latency_ms,
+                        total_latency_ms=total_latency_ms + exc.total_latency_ms,
                         fallback_reason=exc.reason,
+                        attempted_models=[*attempted_models, *exc.attempted_models],
+                        final_model="",
                     )
                 answer = repaired.content
                 calls += repaired.calls
+                attempted_models.extend(repaired.attempted_models)
+                final_model = repaired.final_model or repaired.model
+                model_fallback_reason = repaired.fallback_reason or model_fallback_reason
                 input_tokens = self._sum_usage(input_tokens, repaired.input_tokens)
                 output_tokens = self._sum_usage(output_tokens, repaired.output_tokens)
                 total_tokens = self._sum_usage(total_tokens, repaired.total_tokens)
@@ -346,7 +358,7 @@ class AnswerGenerator:
                     answer=self._extractive(query, evidence, prefix),
                     mode="local_extractive",
                     external_calls=calls,
-                    model=result.model,
+                    model=final_model or result.model,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
@@ -355,12 +367,14 @@ class AnswerGenerator:
                     first_token_latency_ms=first_token_latency_ms,
                     total_latency_ms=total_latency_ms,
                     fallback_reason="llm_invalid_response",
+                    attempted_models=attempted_models,
+                    final_model="",
                 )
             return GenerationOutcome(
                 answer=self._normalize_reference_section(answer, evidence),
                 mode="llm_grounded",
                 external_calls=calls,
-                model=result.model,
+                model=final_model or result.model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 total_tokens=total_tokens,
@@ -368,13 +382,19 @@ class AnswerGenerator:
                 token_usage_missing_reason=token_usage_missing_reason,
                 first_token_latency_ms=first_token_latency_ms,
                 total_latency_ms=total_latency_ms,
+                fallback_reason=model_fallback_reason,
+                attempted_models=attempted_models,
+                final_model=final_model,
             )
         except LLMClientError as exc:
             return GenerationOutcome(
                 answer=self._extractive(query, evidence, prefix),
                 mode="local_extractive",
                 external_calls=exc.attempts,
-                model=self.settings.llm_model,
+                model=exc.final_model or self.primary_model,
                 token_usage_missing_reason=exc.reason,
+                total_latency_ms=exc.total_latency_ms,
                 fallback_reason=exc.reason,
+                attempted_models=exc.attempted_models,
+                final_model=exc.final_model,
             )

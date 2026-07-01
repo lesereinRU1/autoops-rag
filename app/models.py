@@ -65,6 +65,8 @@ class RuntimeStats(BaseModel):
     first_token_latency_ms: float | None = Field(description="首个输出可用耗时；非流式时等于响应到达耗时")
     llm_latency_ms: float = Field(description="外部模型请求总耗时，单位为毫秒")
     llm_model: str = Field(description="本次配置或实际返回的外部模型名称")
+    attempted_models: list[str] = Field(default_factory=list, description="本次按顺序尝试的外部模型")
+    final_model: str = Field(default="", description="本次最终成功使用的模型；本地回答时为空")
     generation_mode: str = Field(description="回答方式：llm_grounded或local_extractive")
     generation_fallback_reason: str = Field(description="外部模型降级原因；没有降级时为空")
 
@@ -85,6 +87,8 @@ class RagTraceResponse(BaseModel):
     injected_context: list[dict[str, Any]] = Field(default_factory=list)
     used_chunk_ids: list[str] = Field(default_factory=list)
     llm_model: str
+    attempted_models: list[str] = Field(default_factory=list)
+    final_model: str = ""
     input_tokens: int | None
     output_tokens: int | None
     total_tokens: int | None
@@ -159,6 +163,7 @@ class IndexStatusResponse(BaseModel):
     latest_checked_at: str = Field(description="资料最近核对日期")
     llm_enabled: bool = Field(description="是否配置外部大语言模型")
     llm_model: str = Field(description="配置的外部大语言模型名称")
+    llm_model_fallbacks: list[str] = Field(default_factory=list, description="按顺序备用的外部模型")
 
 
 class HealthResponse(IndexStatusResponse):

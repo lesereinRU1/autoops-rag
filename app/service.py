@@ -195,6 +195,9 @@ class AutoOpsService:
         )
         total_ms = round((time.perf_counter() - started) * 1000, 2)
         fallback_reason = generation_usage.get("fallback_reason", "")
+        attempted_models = list(generation_usage.get("attempted_models", []))
+        final_model = generation_usage.get("final_model", "")
+        configured_model = self.settings.llm_primary_model
         token_usage_available = bool(generation_usage.get("token_usage_available", False))
         token_usage_missing_reason = generation_usage.get("token_usage_missing_reason", "")
         if not token_usage_available and not token_usage_missing_reason:
@@ -217,7 +220,9 @@ class AutoOpsService:
             "final_evidence": self.retriever._trace_hits(evidence),
             "injected_context": self._context_items(evidence),
             "used_chunk_ids": source_chunk_ids,
-            "llm_model": generation_usage.get("model") or self.settings.llm_model,
+            "llm_model": final_model or generation_usage.get("model") or configured_model,
+            "attempted_models": attempted_models,
+            "final_model": final_model,
             "input_tokens": generation_usage.get("input_tokens"),
             "output_tokens": generation_usage.get("output_tokens"),
             "total_tokens": generation_usage.get("total_tokens"),
@@ -260,7 +265,9 @@ class AutoOpsService:
                 "token_usage_missing_reason": token_usage_missing_reason,
                 "first_token_latency_ms": generation_usage.get("first_token_latency_ms"),
                 "llm_latency_ms": round(float(generation_usage.get("total_latency_ms", 0.0)), 2),
-                "llm_model": generation_usage.get("model") or self.settings.llm_model,
+                "llm_model": final_model or generation_usage.get("model") or configured_model,
+                "attempted_models": attempted_models,
+                "final_model": final_model,
                 "generation_mode": generation_usage.get("mode", "local_extractive"),
                 "generation_fallback_reason": fallback_reason,
             },
@@ -340,7 +347,8 @@ class AutoOpsService:
                 and self.settings.llm_base_url
                 and self.settings.llm_api_key
             ),
-            "llm_model": self.settings.llm_model,
+            "llm_model": self.settings.llm_primary_model,
+            "llm_model_fallbacks": self.settings.llm_model_candidates[1:],
         }
 
     def close(self) -> None:

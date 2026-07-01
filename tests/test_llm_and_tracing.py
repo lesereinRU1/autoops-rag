@@ -36,8 +36,10 @@ def _hit() -> SearchHit:
 
 
 class _Response:
-    def __init__(self, payload: dict) -> None:
+    def __init__(self, payload: dict, status_code: int = 200) -> None:
         self.payload = payload
+        self.status_code = status_code
+        self.text = json.dumps(payload)
 
     def raise_for_status(self) -> None:
         return None
@@ -58,6 +60,22 @@ class _Client:
 
     def post(self, *args, **kwargs) -> _Response:
         return _Response(self.payload)
+
+
+class _SequenceClient:
+    def __init__(self, responses: list[_Response]) -> None:
+        self.responses = list(responses)
+        self.requested_models: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args) -> None:
+        return None
+
+    def post(self, *args, **kwargs) -> _Response:
+        self.requested_models.append(kwargs["json"]["model"])
+        return self.responses.pop(0)
 
 
 def test_non_streaming_llm_usage_is_parsed(monkeypatch):
@@ -88,6 +106,88 @@ def test_missing_usage_has_machine_readable_reason(monkeypatch):
     assert result.token_usage_available is False
     assert result.total_tokens is None
     assert result.token_usage_missing_reason == "provider_did_not_return_usage"
+
+
+def test_quota_error_switches_to_next_model_once(monkeypatch):
+    client = _SequenceClient(
+        [
+            _Response(
+                {"error": {"code": "QuotaExceeded", "message": "insufficient quota"}},
+                status_code=429,
+            ),
+            _Response(
+                {
+                    "model": "qwen3.7-plus",
+                    "choices": [{"message": {"content": "回答"}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        "app.generation.llm_client.httpx.Client", lambda *args, **kwargs: client
+    )
+
+    result = LLMClient(
+        "https://example.invalid/v1",
+        "test-only",
+        "qwen-plus",
+        1,
+        fallback_models=["qwen3.7-plus", "qwen-plus"],
+    ).generate("prompt")
+
+    assert client.requested_models == ["qwen-plus", "qwen3.7-plus"]
+    assert result.calls == 2
+    assert result.attempted_models == ["qwen-plus", "qwen3.7-plus"]
+    assert result.final_model == "qwen3.7-plus"
+    assert result.model == "qwen3.7-plus"
+    assert result.fallback_reason == "llm_rate_limited"
+    assert result.total_tokens == 16
+
+
+def test_all_unavailable_models_are_attempted_once_then_raise(monkeypatch):
+    client = _SequenceClient(
+        [
+            _Response({"error": {"message": "quota exceeded"}}, status_code=402),
+            _Response({"error": {"message": "ResourceExhausted"}}, status_code=403),
+        ]
+    )
+    monkeypatch.setattr(
+        "app.generation.llm_client.httpx.Client", lambda *args, **kwargs: client
+    )
+
+    try:
+        LLMClient(
+            "https://example.invalid/v1",
+            "test-only",
+            "qwen-plus",
+            1,
+            fallback_models=["glm-5"],
+        ).generate("prompt")
+        raise AssertionError("expected LLMClientError")
+    except LLMClientError as exc:
+        assert exc.attempts == 2
+        assert exc.attempted_models == ["qwen-plus", "glm-5"]
+        assert exc.final_model == ""
+        assert exc.reason == "llm_quota_exceeded"
+
+    assert client.requested_models == ["qwen-plus", "glm-5"]
+
+
+def test_model_name_and_fallbacks_are_deduplicated():
+    settings = Settings(
+        _env_file=None,
+        model_name="qwen-max",
+        llm_model="legacy-model",
+        model_fallbacks="qwen-max, glm-5, qwen-max, deepseek-r1-distill-qwen-7b",
+    )
+
+    assert settings.llm_primary_model == "qwen-max"
+    assert settings.llm_model_candidates == [
+        "qwen-max",
+        "glm-5",
+        "deepseek-r1-distill-qwen-7b",
+    ]
 
 
 def test_generator_success_is_grounded_and_records_calls():
@@ -121,6 +221,8 @@ def test_generator_success_is_grounded_and_records_calls():
                 token_usage_missing_reason="",
                 first_token_latency_ms=10.0,
                 total_latency_ms=20.0,
+                attempted_models=["qwen-plus"],
+                final_model="qwen-plus",
             )
 
     generator.llm = FakeClient()
@@ -129,6 +231,8 @@ def test_generator_success_is_grounded_and_records_calls():
     assert outcome.external_calls == 1
     assert outcome.total_tokens == 50
     assert outcome.fallback_reason == ""
+    assert outcome.attempted_models == ["qwen-plus"]
+    assert outcome.final_model == "qwen-plus"
 
 
 def test_generator_error_falls_back_with_reason():
@@ -142,13 +246,21 @@ def test_generator_error_falls_back_with_reason():
 
     class FailingClient:
         def generate(self, prompt: str, retries: int = 1):
-            raise LLMClientError("llm_api_error", attempts=2)
+            raise LLMClientError(
+                "llm_quota_exceeded",
+                attempts=2,
+                attempted_models=["qwen-plus", "glm-5"],
+                total_latency_ms=25.0,
+            )
 
     generator.llm = FailingClient()
     outcome = generator.generate("为什么40001对应偏移0？", [_hit()])
     assert outcome.mode == "local_extractive"
     assert outcome.external_calls == 2
-    assert outcome.fallback_reason == "llm_api_error"
+    assert outcome.fallback_reason == "llm_quota_exceeded"
+    assert outcome.attempted_models == ["qwen-plus", "glm-5"]
+    assert outcome.final_model == ""
+    assert outcome.total_latency_ms == 25.0
 
 
 def test_trace_is_jsonl_and_redacts_credentials(tmp_path):
@@ -160,6 +272,8 @@ def test_trace_is_jsonl_and_redacts_credentials(tmp_path):
             "llm_api_key": "fixture-token",
             "headers": {"Authorization": "Bearer fixture-token"},
             "original_question": "Authorization: Bearer fixture-token sk-fixture123",
+            "attempted_models": ["qwen-plus", "glm-5"],
+            "final_model": "glm-5",
         }
     )
     raw = path.read_text(encoding="utf-8")
@@ -171,6 +285,17 @@ def test_trace_is_jsonl_and_redacts_credentials(tmp_path):
     clean = store.get("request-1234")
     assert "llm_api_key" not in clean
     assert "Authorization" not in clean.get("headers", {})
+    assert clean["attempted_models"] == ["qwen-plus", "glm-5"]
+    assert clean["final_model"] == "glm-5"
+
+
+def test_pages_show_actual_and_attempted_models():
+    root = Path(__file__).resolve().parents[1]
+    for relative in ("static/index.html", "static/docs.html"):
+        page = (root / relative).read_text(encoding="utf-8")
+        assert "final_model" in page
+        assert "attempted_models" in page
+        assert "实际模型" in page
 
 
 def test_unsafe_and_out_of_scope_requests_are_rejected_before_generation():

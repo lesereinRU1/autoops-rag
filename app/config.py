@@ -37,7 +37,22 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_api_key: str = ""
     llm_model: str = "qwen-plus"
+    model_name: str = ""
+    model_fallbacks: str = ""
     llm_timeout_seconds: float = 40.0
+
+    @property
+    def llm_primary_model(self) -> str:
+        """MODEL_NAME takes precedence while LLM_MODEL remains backward compatible."""
+        return self.model_name.strip() or self.llm_model.strip() or "qwen-plus"
+
+    @property
+    def llm_model_candidates(self) -> list[str]:
+        candidates = [self.llm_primary_model]
+        candidates.extend(
+            value.strip() for value in self.model_fallbacks.split(",") if value.strip()
+        )
+        return list(dict.fromkeys(candidates))
 
     @property
     def data_dir(self) -> Path:

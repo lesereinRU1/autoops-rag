@@ -34,6 +34,10 @@ def extract_alarm(question: str) -> str | None:
 
 
 def build_graph(service):
+    configured_model = getattr(
+        service.settings, "llm_primary_model", service.settings.llm_model
+    )
+
     def parse(state: AgentState) -> AgentState:
         question = state["question"]
         policy_question = state.get("original_question", question)
@@ -108,7 +112,9 @@ def build_graph(service):
             "generation_usage": {
                 "mode": "local_extractive",
                 "external_calls": 0,
-                "model": service.settings.llm_model,
+                "model": configured_model,
+                "attempted_models": [],
+                "final_model": "",
                 "input_tokens": None,
                 "output_tokens": None,
                 "total_tokens": None,
@@ -245,6 +251,8 @@ def build_graph(service):
                 "evidence_count": len(state.get("evidence", [])),
                 "mode": outcome.mode,
                 "fallback_reason": outcome.fallback_reason,
+                "attempted_models": outcome.attempted_models,
+                "final_model": outcome.final_model,
             }
         )
         return {
@@ -254,6 +262,8 @@ def build_graph(service):
                 "mode": outcome.mode,
                 "external_calls": outcome.external_calls,
                 "model": outcome.model,
+                "attempted_models": outcome.attempted_models,
+                "final_model": outcome.final_model,
                 "input_tokens": outcome.input_tokens,
                 "output_tokens": outcome.output_tokens,
                 "total_tokens": outcome.total_tokens,
