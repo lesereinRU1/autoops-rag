@@ -20,6 +20,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.llm_smoke_test import evaluate_claims, extract_cited_chunk_ids
+from app.safety import classify_forbidden_facts, unsafe_response_violations
+from app.tracing import sanitize_trace
 from scripts.validate_formal_eval import (
     DEFAULT_DATASET,
     DEFAULT_REPORT as READINESS_REPORT,
@@ -194,10 +196,14 @@ def main() -> int:
                     fact for fact in row["required_facts"]
                     if normalized_contains(result.get("answer", ""), fact)
                 ]
-                forbidden_hits = [
-                    fact for fact in row["forbidden_facts"]
-                    if normalized_contains(result.get("answer", ""), fact)
-                ]
+                forbidden_hits, forbidden_false_positives = classify_forbidden_facts(
+                    result.get("answer", ""), row["forbidden_facts"]
+                )
+                if row["category"] == "unsafe_request":
+                    forbidden_hits.extend(
+                        f"unsafe_policy:{finding}"
+                        for finding in unsafe_response_violations(result.get("answer", ""))
+                    )
                 fallback_event = (
                     runtime.get("external_llm_calls", 0) > 0
                     and runtime.get("generation_mode") == "local_extractive"
@@ -241,6 +247,7 @@ def main() -> int:
                     "required_fact_hits": required_hits,
                     "required_fact_total": len(row["required_facts"]),
                     "forbidden_fact_hits": forbidden_hits,
+                    "forbidden_fact_checker_false_positives": forbidden_false_positives,
                     "refused": refused,
                     "fallback_event": fallback_event,
                     "fallback_success": fallback_success,
@@ -295,6 +302,15 @@ def main() -> int:
     total_required = sum(item.get("required_fact_total", 0) for item in answerable_details)
     hit_required = sum(len(item.get("required_fact_hits", [])) for item in answerable_details)
     fallback_events = [item for item in successful if item.get("fallback_event")]
+    checker_false_positives = [
+        {
+            "question_id": item["id"],
+            "question": item["question"],
+            **finding,
+        }
+        for item in successful
+        for finding in item.get("forbidden_fact_checker_false_positives", [])
+    ]
     retrieval_latencies = [float(item["retrieval_latency_ms"]) for item in successful]
     llm_latencies = [
         float(item["llm_latency_ms"])
@@ -329,6 +345,7 @@ def main() -> int:
         "forbidden_fact_violation_count": sum(
             len(item.get("forbidden_fact_hits", [])) for item in successful
         ),
+        "forbidden_fact_checker_false_positive_count": len(checker_false_positives),
         "unanswerable_refusal_accuracy": mean(
             [float(item["refused"]) for item in unanswerable_details]
         ),
@@ -373,6 +390,7 @@ def main() -> int:
             "fallback_events": len(fallback_events),
         },
         "unsupported_claims": unsupported,
+        "checker_false_positives": checker_false_positives,
         "details": details,
         "disclaimer": DISCLAIMER,
         "limitations": [
@@ -382,6 +400,7 @@ def main() -> int:
             "Recall@5不能单独作为项目质量结论。",
         ],
     }
+    report = sanitize_trace(report)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(
         json.dumps(
