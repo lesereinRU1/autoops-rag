@@ -41,6 +41,98 @@ def test_grounded_citation_guard_requires_one_adjacent_source_per_atomic_claim()
     assert any("没有来源编号" in warning for warning in warnings)
 
 
+def test_grounded_citation_guard_rejects_question_only_identifier():
+    evidence = [
+        SearchHit(
+            chunk=Chunk(
+                chunk_id="c1",
+                doc_id="d",
+                doc_name="手册",
+                text="不要在上一条请求仍处于 BUSY 时反复产生新的 REQ 上升沿。",
+            ),
+            score=1,
+        )
+    ]
+    answer = (
+        "1. 结论\n- MB_CLIENT 在 BUSY 时不要反复触发 REQ。[来源1]\n"
+        "2. 原因\n- 在 BUSY 时反复触发 REQ 不符合当前证据中的请求触发要求。[来源1]\n"
+        "3. 排查 / 换算建议\n- 核对 BUSY 与 REQ 的触发关系。[来源1]\n"
+        "4. 引用来源\n5. 安全提示\n"
+    )
+
+    ok, warnings = validate_grounded_citations(answer, evidence)
+
+    assert not ok
+    assert any("MB_CLIENT" in warning for warning in warnings)
+
+
+def test_grounded_citation_guard_rejects_unsupported_generalization_term():
+    evidence = [
+        SearchHit(
+            chunk=Chunk(
+                chunk_id="c1",
+                doc_id="d",
+                doc_name="手册",
+                text="多寄存器数值的字顺序由设备实现决定。",
+            ),
+            score=1,
+        )
+    ]
+    answer = (
+        "1. 结论\n- 不同设备可能采用不同字节排列。[来源1]\n"
+        "2. 原因\n- 多寄存器数值的字顺序由设备实现决定。[来源1]\n"
+        "3. 排查 / 换算建议\n- 核对设备资料中的字顺序。[来源1]\n"
+        "4. 引用来源\n5. 安全提示\n"
+    )
+
+    ok, warnings = validate_grounded_citations(answer, evidence)
+
+    assert not ok
+    assert any("可能" in warning for warning in warnings)
+
+
+def test_grounded_citation_guard_accepts_two_targeted_direct_rewrites():
+    busy_evidence = [
+        SearchHit(
+            chunk=Chunk(
+                chunk_id="c1",
+                doc_id="d",
+                doc_name="手册",
+                text="不要在上一条请求仍处于 BUSY 时反复产生新的 REQ 上升沿。",
+            ),
+            score=1,
+        )
+    ]
+    busy_answer = (
+        "1. 结论\n- 在 BUSY 时反复触发 REQ 不符合当前证据中的请求触发要求。[来源1]\n"
+        "2. 原因\n- 上一条请求处于 BUSY 时不要产生新的 REQ 上升沿。[来源1]\n"
+        "3. 排查 / 换算建议\n- 核对 BUSY 时是否产生新的 REQ 上升沿。[来源1]\n"
+        "4. 引用来源\n5. 安全提示\n"
+    )
+    ok, warnings = validate_grounded_citations(busy_answer, busy_evidence)
+    assert ok and not warnings
+
+    order_evidence = [
+        SearchHit(
+            chunk=Chunk(
+                chunk_id="c2",
+                doc_id="d",
+                doc_name="手册",
+                text="多寄存器数值的字顺序由设备实现决定。",
+            ),
+            score=1,
+        )
+    ]
+    order_answer = (
+        "1. 结论\n- 多寄存器数值的字顺序由设备实现决定。[来源1]\n"
+        "2. 原因\n- 多寄存器数值的字顺序由设备实现决定。[来源1]\n"
+        "3. 排查 / 换算建议\n- 核对设备资料中的字顺序。[来源1]\n"
+        "4. 引用来源\n5. 安全提示\n"
+    )
+    ok, warnings = validate_grounded_citations(order_answer, order_evidence)
+    assert ok and not warnings
+
+
 def test_graph_feedback_and_verified_solution_loop(tmp_path):
     seed = __import__("pathlib").Path(__file__).resolve().parents[1] / "data" / "seed"
     memory = MemoryStore(tmp_path / "loop.db", seed)

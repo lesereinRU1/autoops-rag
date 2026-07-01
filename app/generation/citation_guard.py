@@ -8,6 +8,8 @@ from app.models import SearchHit
 CHUNK_ID_PATTERN = re.compile(r"\|\s*([^\]|]+)\]")
 SOURCE_INDEX_PATTERN = re.compile(r"\[来源\s*(\d+)(?:[:：][^\]]*)?\]")
 NARRATIVE_PATTERN = re.compile(r"1\. 结论(.*?)4\. 引用来源", re.S)
+MB_IDENTIFIER_PATTERN = re.compile(r"(?<![A-Za-z0-9_])MB_[A-Z0-9_]+(?![A-Za-z0-9_])", re.I)
+GENERALIZATION_TERMS = ("通常", "一般", "可能", "默认", "建议直接", "应该是")
 
 
 def grounded_claims(answer: str) -> list[str]:
@@ -47,6 +49,29 @@ def validate_grounded_citations(
             warnings.append(f"第{position}条事实句必须且只能引用一个有效来源。")
         if not re.search(r"\[来源\s*\d+(?:[:：][^\]]*)?\]\s*[。！？；;]?$", claim):
             warnings.append(f"第{position}条事实句的来源编号必须紧邻句末。")
+        if len(set(valid)) == 1 and len(indexes) == 1:
+            source_text = evidence[valid[0] - 1].chunk.text
+            plain_claim = SOURCE_INDEX_PATTERN.sub("", claim)
+            missing_identifiers = sorted({
+                value for value in MB_IDENTIFIER_PATTERN.findall(plain_claim)
+                if value.lower() not in source_text.lower()
+            })
+            if missing_identifiers:
+                warnings.append(
+                    f"第{position}条事实句含引用来源未直接出现的标识："
+                    + "、".join(missing_identifiers)
+                    + "；请删去标识并只改写来源原文。"
+                )
+            unsupported_terms = [
+                term for term in GENERALIZATION_TERMS
+                if term in plain_claim and term not in source_text
+            ]
+            if unsupported_terms:
+                warnings.append(
+                    f"第{position}条事实句含引用来源未直接出现的扩展性措辞："
+                    + "、".join(unsupported_terms)
+                    + "；请改写为来源中的直接表述。"
+                )
     return not warnings, warnings
 
 
