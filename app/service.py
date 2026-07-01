@@ -63,6 +63,60 @@ class AutoOpsService:
             }
 
         version_text = " ".join(filter(None, (question, version)))
+        normalized_version_text = version_text.lower()
+
+        # A model name alone is not enough to determine version-dependent
+        # structures or ranges. Keep this gate narrow so ordinary CONNECT
+        # questions are still handled by retrieval.
+        has_missing_version_context = (
+            any(
+                marker in normalized_version_text
+                for marker in ("未提供", "没有提供", "缺少", "未知", "无法确认")
+            )
+            and any(
+                marker in normalized_version_text
+                for marker in ("固件", "tia portal", "通信指令")
+            )
+            and "版本" in normalized_version_text
+        )
+        has_version_mismatch_context = any(
+            marker in normalized_version_text
+            for marker in (
+                "版本不一致",
+                "版本与现场固件版本不一致",
+                "没有对应版本说明",
+                "无对应版本说明",
+                "缺少对应版本说明",
+                "没有对应版本资料",
+                "无对应版本资料",
+                "缺少对应版本资料",
+            )
+        )
+        asks_connect_structure = (
+            "connect" in normalized_version_text
+            and any(
+                marker in normalized_version_text
+                for marker in ("字段结构", "字段定义", "字段组成")
+            )
+        )
+        asks_to_apply_parameter_range = (
+            "参数范围" in normalized_version_text
+            and any(
+                marker in normalized_version_text
+                for marker in ("直接套用", "套用", "确定", "确认")
+            )
+        )
+        if (
+            has_missing_version_context or has_version_mismatch_context
+        ) and (asks_connect_structure or asks_to_apply_parameter_range):
+            return {
+                "kind": "unanswerable_version",
+                "reason": (
+                    "当前资料缺少匹配的固件、TIA Portal、通信指令或手册版本信息，"
+                    "不能据此确定 CONNECT 字段结构或直接套用参数范围"
+                ),
+            }
+
         requested_versions = set(
             re.findall(r"(?<![A-Za-z0-9])V\d+(?:\.\d+)+", version_text, re.I)
         )
