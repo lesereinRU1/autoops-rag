@@ -41,3 +41,7 @@ reports/*.err.log
 reports/*.out.log
 reports/*_final*.log
 reports/reindex*.log
+
+# Local draft / raw manual files
+data/eval/formal_questions_draft_011_030.jsonl
+data/raw/**/*.pdf
