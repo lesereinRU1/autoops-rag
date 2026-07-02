@@ -344,11 +344,31 @@ docker compose down -v
 
 `down -v` 会删除 Qdrant collection、processed chunks、模型缓存、SQLite 和 Trace，仅在确认可以重新生成这些数据时使用。Compose 默认只运行一个 app 实例；Qdrant REST 端口只绑定到宿主机 `127.0.0.1:6333`，当前不使用 6334 gRPC 端口。
 
+#### 低内存演示模式
+
+内存较小的电脑可以叠加低内存配置。它使用确定性 hash embedding、关闭 BM25 常驻分词索引、最多 2 个并发查询，并写入独立的 `autoops_manuals_hash` collection，不会删除完整 BGE 索引：
+
+```powershell
+docker compose `
+  -f docker-compose.yml `
+  -f docker-compose.low-memory.yml `
+  up -d --build
+```
+
+切回完整 BGE 模式：
+
+```powershell
+docker compose -f docker-compose.yml up -d --force-recreate
+```
+
+低内存模式只用于功能演示，不能使用其检索结果更新 README 中的正式 BGE 指标。
+
 ### 测试与评测集校验
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m coverage run -m pytest
+.\.venv\Scripts\python.exe -m coverage report
 .\.venv\Scripts\python.exe scripts\validate_formal_eval.py
 .\.venv\Scripts\python.exe scripts\check_public_release.py --history
 ```
@@ -362,8 +382,14 @@ GitHub Actions 会自动执行测试、评测集校验、发布前敏感信息�
 ### 健康检查
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
+# 只检查 API 进程是否存活，不加载模型或访问 Qdrant
+Invoke-RestMethod http://127.0.0.1:8000/health/live
+
+# 检查模型、索引和 Qdrant 是否真正就绪
+Invoke-RestMethod http://127.0.0.1:8000/health/ready
 ```
+
+`GET /health` 保留为完整就绪检查的兼容入口。Docker 使用 `/health/ready`，Qdrant 也有独立容器健康检查。
 
 ### 只检索手册
 
@@ -416,13 +442,17 @@ Invoke-RestMethod "http://127.0.0.1:8000/api/traces/$($result.request_id)"
 
 | 接口 | 用途 |
 |---|---|
+| `GET /health/live` | 轻量存活检查，不初始化模型 |
+| `GET /health/ready` | 完整依赖与索引就绪检查 |
 | `GET /api/index/status` | 查看索引、embedding 和资料状态 |
-| `POST /api/index/ingest` | 重新解析资料并构建索引 |
+| `POST /api/index/ingest` | 重新解析资料并构建索引，需要 `X-Admin-Key` |
 | `GET /api/alarms/{code}` | 查询结构化故障码 |
 | `POST /api/feedback` | 保存回答反馈 |
 | `POST /api/solutions/verify` | 保存人工确认方案 |
 | `DELETE /api/sessions/{session_id}` | 清空指定会话 |
 | `GET /api/metrics/business` | 查看反馈与已验证方案统计 |
+
+索引重建默认关闭。确需通过 HTTP 触发时，在本地 `.env` 设置 `INDEX_ADMIN_API_KEY`，重建请求使用同值的 `X-Admin-Key` 请求头。不要把管理密钥写入脚本、README 或前端页面。
 
 ## 项目结构
 

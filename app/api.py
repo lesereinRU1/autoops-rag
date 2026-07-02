@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import secrets
 import time
 import uuid
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Path as PathParam, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Path as PathParam, Query, Request
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.responses import JSONResponse
@@ -24,6 +27,7 @@ from app.models import (
     HealthResponse,
     IndexStatusResponse,
     IngestResponse,
+    LivenessResponse,
     RagTraceResponse,
     SearchRequest,
     SearchResponse,
@@ -34,6 +38,13 @@ from app.models import (
 from app.service import AutoOpsService
 from app.config import get_settings
 from app.http_guard import SlidingWindowRateLimiter
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    if get_service.cache_info().currsize:
+        get_service().close()
 
 
 app = FastAPI(
@@ -49,12 +60,45 @@ app = FastAPI(
     ],
     docs_url=None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 SETTINGS = get_settings()
 QUERY_GATE = asyncio.Semaphore(max(1, SETTINGS.max_concurrent_queries))
-RATE_LIMITER = SlidingWindowRateLimiter(SETTINGS.rate_limit_per_minute)
+RATE_LIMITER = SlidingWindowRateLimiter(
+    SETTINGS.rate_limit_per_minute,
+    max_clients=SETTINGS.rate_limit_max_clients,
+)
+LOGGER = logging.getLogger("autoops.api")
+
+
+def require_index_admin(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+) -> None:
+    configured = SETTINGS.index_admin_api_key.strip()
+    if not configured:
+        raise HTTPException(status_code=503, detail="索引维护接口未启用")
+    if not x_admin_key or not secrets.compare_digest(x_admin_key, configured):
+        raise HTTPException(
+            status_code=401,
+            detail="索引管理凭据无效",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+
+def internal_error(operation: str, request: Request, exc: Exception) -> HTTPException:
+    request_id = getattr(request.state, "request_id", "unknown")
+    LOGGER.exception(
+        "%s failed request_id=%s error_type=%s",
+        operation,
+        request_id,
+        type(exc).__name__,
+    )
+    return HTTPException(
+        status_code=500,
+        detail="内部服务错误，请使用响应头 X-Request-ID 排查",
+    )
 
 
 @app.middleware("http")
@@ -134,15 +178,50 @@ def swagger_docs():
     return HTMLResponse(content)
 
 
+def readiness_payload(request: Request) -> dict:
+    try:
+        return {"status": "ok", **get_service().status()}
+    except Exception as exc:
+        request_id = getattr(request.state, "request_id", "unknown")
+        LOGGER.exception(
+            "readiness check failed request_id=%s error_type=%s",
+            request_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=503, detail="服务尚未就绪") from exc
+
+
+@app.get(
+    "/health/live",
+    response_model=LivenessResponse,
+    response_description="进程存活",
+    tags=["服务状态"],
+    summary="轻量存活检查",
+)
+def liveness():
+    return {"status": "ok"}
+
+
+@app.get(
+    "/health/ready",
+    response_model=HealthResponse,
+    response_description="依赖与索引就绪",
+    tags=["服务状态"],
+    summary="完整就绪检查",
+)
+def readiness(request: Request):
+    return readiness_payload(request)
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
     response_description="请求成功",
     tags=["服务状态"],
-    summary="健康检查",
+    summary="兼容健康检查",
 )
-def health():
-    return {"status": "ok", **get_service().status()}
+def health(request: Request):
+    return readiness_payload(request)
 
 
 @app.get(
@@ -163,11 +242,15 @@ def index_status():
     tags=["索引维护"],
     summary="重新解析资料并构建索引",
 )
-def ingest(mode: str = Query(default="semantic", pattern="^(semantic|fixed)$")):
+def ingest(
+    http_request: Request,
+    mode: str = Query(default="semantic", pattern="^(semantic|fixed)$"),
+    _: None = Depends(require_index_admin),
+):
     try:
         return get_service().reindex(mode)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise internal_error("index_ingest", http_request, exc) from exc
 
 
 @app.post(
@@ -198,7 +281,7 @@ def chat(request: ChatRequest, http_request: Request):
     try:
         return get_service().chat(request, http_request.state.request_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise internal_error("chat", http_request, exc) from exc
 
 
 @app.get(
@@ -310,9 +393,3 @@ def business_metrics():
 )
 def graph_context(query: str = Query(min_length=1, max_length=500)):
     return get_service().graph_context(query)
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    if get_service.cache_info().currsize:
-        get_service().close()

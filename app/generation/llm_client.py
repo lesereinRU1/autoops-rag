@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 
 import httpx
+
+
+LOGGER = logging.getLogger("autoops.llm")
 
 
 @dataclass
@@ -183,13 +187,26 @@ class LLMClient:
                                 },
                             )
                             break
-                        except (httpx.TimeoutException, httpx.TransportError):
+                        except (httpx.TimeoutException, httpx.TransportError) as exc:
+                            last_reason = "llm_transport_retry"
                             if transport_attempt >= retries:
                                 raise
+                            LOGGER.warning(
+                                "llm_transport_retry model=%s attempt=%d/%d error_type=%s",
+                                model,
+                                transport_attempt + 1,
+                                retries + 1,
+                                type(exc).__name__,
+                            )
                             time.sleep(min(0.5 * (2**transport_attempt), 2.0))
                     unavailable_reason = _model_unavailable_reason(response)
                     if unavailable_reason:
                         last_reason = unavailable_reason
+                        LOGGER.info(
+                            "llm_model_fallback model=%s reason=%s",
+                            model,
+                            unavailable_reason,
+                        )
                         continue
                     response.raise_for_status()
                     try:
@@ -241,6 +258,12 @@ class LLMClient:
 
                     input_tokens, output_tokens, total_tokens, usage_ok, usage_reason = _parse_usage(payload)
                     total_latency_ms = (time.perf_counter() - started) * 1000
+                    LOGGER.info(
+                        "llm_call_success model=%s calls=%d latency_ms=%.2f",
+                        model,
+                        len(attempted_models),
+                        total_latency_ms,
+                    )
                     return LLMResult(
                         content=content,
                         calls=len(attempted_models),
@@ -258,6 +281,11 @@ class LLMClient:
                         fallback_reason=last_reason if len(attempted_models) > 1 else "",
                     )
                 except httpx.TimeoutException as exc:
+                    LOGGER.warning(
+                        "llm_call_failed model=%s reason=llm_timeout calls=%d",
+                        model,
+                        len(attempted_models),
+                    )
                     raise LLMClientError(
                         "llm_timeout",
                         len(attempted_models),
@@ -266,6 +294,12 @@ class LLMClient:
                         (time.perf_counter() - started) * 1000,
                     ) from exc
                 except httpx.HTTPError as exc:
+                    LOGGER.warning(
+                        "llm_call_failed model=%s reason=llm_api_error calls=%d error_type=%s",
+                        model,
+                        len(attempted_models),
+                        type(exc).__name__,
+                    )
                     raise LLMClientError(
                         "llm_api_error",
                         len(attempted_models),

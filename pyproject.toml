@@ -3,3 +3,9 @@ pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true

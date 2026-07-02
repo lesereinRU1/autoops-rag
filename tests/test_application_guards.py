@@ -4,8 +4,10 @@ import threading
 import time
 
 from app.concurrency import ReadWriteLock
+from app.config import Settings
 from app.http_guard import SlidingWindowRateLimiter
 from app.models import Chunk, SearchHit
+from app.retrieval.hybrid import HybridRetriever
 from app.retrieval.query_expansion import expand_query
 from app.retrieval.query_expansion import technical_terms
 from app.service import AutoOpsService
@@ -67,3 +69,47 @@ def test_rate_limiter_and_read_write_lock_allow_concurrent_readers():
     for thread in threads:
         thread.join()
     assert maximum >= 2
+
+
+def test_rate_limiter_bounds_tracked_clients():
+    limiter = SlidingWindowRateLimiter(limit=2, window_seconds=60, max_clients=3)
+
+    for index in range(10):
+        assert limiter.check(f"client-{index}", now=float(index))[0]
+
+    assert limiter.tracked_clients == 3
+
+
+def test_disabled_bm25_uses_dense_without_building_sparse_index(monkeypatch):
+    dense_hit = make_hit("dense", "dense evidence", "demo.md", 0.9)
+
+    class FakeVectorStore:
+        backend_name = "hash"
+
+        def __init__(self, _settings):
+            pass
+
+        def search(self, *_args, **_kwargs):
+            return [dense_hit]
+
+        def close(self):
+            pass
+
+    class FakeReranker:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def rerank(self, _query, hits, top_k):
+            return hits[:top_k]
+
+    monkeypatch.setattr("app.retrieval.hybrid.VectorStore", FakeVectorStore)
+    monkeypatch.setattr("app.retrieval.hybrid.Reranker", FakeReranker)
+    monkeypatch.setattr(
+        "app.retrieval.hybrid.BM25Retriever",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("BM25 must stay disabled")),
+    )
+
+    retriever = HybridRetriever(Settings(_env_file=None, enable_bm25=False))
+
+    assert retriever.bm25 is None
+    assert retriever.search_with_strategy("query", strategy="bm25") == [dense_hit]

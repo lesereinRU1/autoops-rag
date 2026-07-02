@@ -376,12 +376,12 @@ class AutoOpsService:
             if chunk.metadata.get("representation") == "table_row"
         ]
         return {
-            "project_root": str(self.settings.data_dir.parent),
             "embedding_backend": self.retriever.vector.backend_name,
             "embedding_model": self.settings.embedding_model,
             "collection": self.settings.qdrant_collection,
             "qdrant_mode": self.retriever.vector.storage_mode,
             "query_expansion_enabled": self.settings.enable_query_expansion,
+            "bm25_enabled": self.settings.enable_bm25,
             "max_concurrent_queries": self.settings.max_concurrent_queries,
             "request_timeout_seconds": self.settings.request_timeout_seconds,
             "rate_limit_per_minute": self.settings.rate_limit_per_minute,

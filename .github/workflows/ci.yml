@@ -34,8 +34,10 @@ jobs:
       - name: Scan publishable files and Git history
         run: python scripts/check_public_release.py --history
 
-      - name: Run tests
-        run: python -m pytest
+      - name: Run tests with coverage
+        run: |
+          python -m coverage run -m pytest
+          python -m coverage report
 
       - name: Validate formal evaluation data
         run: python scripts/validate_formal_eval.py

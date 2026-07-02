@@ -69,7 +69,8 @@
     <table>
       <thead><tr><th>接口</th><th>用途</th></tr></thead>
       <tbody>
-        <tr><td><code>GET /health</code></td><td>检查服务、索引数量和资料状态。</td></tr>
+        <tr><td><code>GET /health/live</code></td><td>轻量存活检查，不加载模型。</td></tr>
+        <tr><td><code>GET /health/ready</code></td><td>检查服务、索引数量和依赖状态。</td></tr>
         <tr><td><code>GET /api/index/status</code></td><td>查看向量模型、Qdrant集合和切片数量。</td></tr>
         <tr><td><code>POST /api/search</code></td><td>返回相关手册片段，不生成答案。</td></tr>
         <tr><td><code>POST /api/chat</code></td><td>选择查询工具并生成带来源的回答。</td></tr>

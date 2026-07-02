@@ -13,7 +13,7 @@ class HybridRetriever:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.vector = VectorStore(settings)
-        self.bm25 = BM25Retriever(settings.chunks_file)
+        self.bm25 = BM25Retriever(settings.chunks_file) if settings.enable_bm25 else None
         self.reranker = Reranker(settings.enable_reranker, settings.reranker_model, settings.model_cache_dir)
 
     @staticmethod
@@ -47,7 +47,11 @@ class HybridRetriever:
         # during reranking so a dictionary addition cannot push an existing candidate
         # out of the Dense/BM25 Top30 pools.
         dense = self.vector.search(query, top_k=30, model=model, version=version)
-        sparse = self.bm25.search(query, top_k=30, model=model, version=version)
+        sparse = (
+            self.bm25.search(query, top_k=30, model=model, version=version)
+            if self.bm25 is not None
+            else []
+        )
         fused = reciprocal_rank_fusion([dense, sparse], k=60, limit=20)
         trace = {
             "dense_topk": self._trace_hits(dense),
@@ -74,7 +78,9 @@ class HybridRetriever:
         if strategy == "dense":
             return self.vector.search(query, top_k=top_k, model=model, version=version)
         if strategy == "bm25":
-            return self.bm25.search(query, top_k=top_k, model=model, version=version)
+            if self.bm25 is not None:
+                return self.bm25.search(query, top_k=top_k, model=model, version=version)
+            return self.vector.search(query, top_k=top_k, model=model, version=version)
         return self.search(query, top_k=top_k, model=model, version=version)
 
     def close(self) -> None:

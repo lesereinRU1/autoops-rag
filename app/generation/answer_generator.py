@@ -299,7 +299,10 @@ class AnswerGenerator:
             f"注入证据：\n{context}"
         )
         try:
-            result = self.llm.generate(prompt, retries=1)
+            result = self.llm.generate(
+                prompt,
+                retries=self.settings.llm_transport_retries,
+            )
             answer = result.content
             citation_ok, citation_warnings = validate_grounded_citations(answer, evidence)
             calls = result.calls

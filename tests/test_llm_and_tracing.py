@@ -181,6 +181,7 @@ def test_transient_transport_error_retries_same_model(monkeypatch):
     assert result.calls == 2
     assert result.attempted_models == ["qwen-plus", "qwen-plus"]
     assert result.final_model == "qwen-plus"
+    assert result.fallback_reason == "llm_transport_retry"
 
 
 def test_all_unavailable_models_are_attempted_once_then_raise(monkeypatch):

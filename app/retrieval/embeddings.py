@@ -39,14 +39,21 @@ class HashingEmbedder:
             yield self._encode(text)
 
 
-def create_embedder(backend: str, model_name: str, dim: int, cache_dir: Path):
+def create_embedder(
+    backend: str,
+    model_name: str,
+    dim: int,
+    cache_dir: Path,
+):
     if backend.lower() == "fastembed":
         os.environ.setdefault("HF_HOME", str(cache_dir / "huggingface"))
         os.environ.setdefault("FASTEMBED_CACHE_PATH", str(cache_dir / "fastembed"))
         from fastembed import TextEmbedding
 
-        model = TextEmbedding(model_name=model_name, cache_dir=str(cache_dir / "fastembed"))
+        model = TextEmbedding(
+            model_name=model_name,
+            cache_dir=str(cache_dir / "fastembed"),
+        )
         sample = next(iter(model.embed(["维度检测"])))
         return model, int(len(sample)), "fastembed"
     return HashingEmbedder(dim), dim, "hash"
-

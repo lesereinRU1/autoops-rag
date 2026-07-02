@@ -1,0 +1,18 @@
+services:
+  index-init:
+    environment:
+      EMBEDDING_BACKEND: hash
+      EMBEDDING_DIM: "512"
+      QDRANT_COLLECTION: autoops_manuals_hash
+      MAX_CONCURRENT_QUERIES: "2"
+      ENABLE_RERANKER: "false"
+      ENABLE_BM25: "false"
+
+  app:
+    environment:
+      EMBEDDING_BACKEND: hash
+      EMBEDDING_DIM: "512"
+      QDRANT_COLLECTION: autoops_manuals_hash
+      MAX_CONCURRENT_QUERIES: "2"
+      ENABLE_RERANKER: "false"
+      ENABLE_BM25: "false"

@@ -145,12 +145,12 @@ class SearchResponse(BaseModel):
 
 
 class IndexStatusResponse(BaseModel):
-    project_root: str = Field(description="项目目录")
     embedding_backend: str = Field(description="向量计算后端")
     embedding_model: str = Field(description="向量模型")
     collection: str = Field(description="Qdrant集合名称")
     qdrant_mode: str = Field(description="Qdrant运行方式：local或server")
     query_expansion_enabled: bool = Field(description="是否启用中英文领域词扩展")
+    bm25_enabled: bool = Field(description="是否启用 BM25 稀疏检索")
     max_concurrent_queries: int = Field(description="检索问答最大并发数")
     request_timeout_seconds: float = Field(description="检索问答超时时间，单位为秒")
     rate_limit_per_minute: int = Field(description="单个客户端每分钟请求上限")
@@ -168,6 +168,10 @@ class IndexStatusResponse(BaseModel):
 
 class HealthResponse(IndexStatusResponse):
     status: str = Field(description="服务状态", examples=["ok"])
+
+
+class LivenessResponse(BaseModel):
+    status: str = Field(description="进程存活状态", examples=["ok"])
 
 
 class IngestResponse(BaseModel):

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-zh-v1.5"
     embedding_dim: int = 512
     enable_reranker: bool = False
+    enable_bm25: bool = True
     enable_table_extraction: bool = True
     reranker_model: str = "BAAI/bge-reranker-base"
     qdrant_collection: str = "autoops_manuals"
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
     max_concurrent_queries: int = 8
     request_timeout_seconds: float = 90.0
     rate_limit_per_minute: int = 300
+    rate_limit_max_clients: int = 10000
+    index_admin_api_key: str = ""
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     llm_enabled: bool = False
@@ -42,6 +45,7 @@ class Settings(BaseSettings):
     model_name: str = ""
     model_fallbacks: str = ""
     llm_timeout_seconds: float = 40.0
+    llm_transport_retries: int = 1
 
     @property
     def llm_primary_model(self) -> str:
