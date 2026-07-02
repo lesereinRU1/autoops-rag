@@ -22,7 +22,8 @@ storage/*
 !storage/.gitkeep
 
 # Raw and processed data
-data/raw/*.pdf
+# Raw manuals and third-party source documents stay local and are not distributed.
+data/raw/
 data/processed/*
 !data/processed/.gitkeep
 
@@ -44,4 +45,3 @@ reports/reindex*.log
 
 # Local draft / raw manual files
 data/eval/formal_questions_draft_011_030.jsonl
-data/raw/**/*.pdf
