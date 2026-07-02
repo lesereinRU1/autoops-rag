@@ -1,0 +1,52 @@
+[
+  {
+    "name": "Modbus TCP port",
+    "aliases": ["TCP端口", "端口", "port", "502"],
+    "minimum": 502,
+    "maximum": 502,
+    "unit": "TCP",
+    "notes": "Modbus TCP 的标准保留端口；设备也可能被组态为其他端口，必须以现场配置为准。",
+    "model": "",
+    "source": "IANA Service Name and Transport Protocol Port Number Registry / Modbus Organization"
+  },
+  {
+    "name": "Modbus PDU address",
+    "aliases": ["寄存器地址", "起始地址", "data address", "MB_DATA_ADDR"],
+    "minimum": 0,
+    "maximum": 65535,
+    "unit": "offset",
+    "notes": "协议字段为 16 位；设备实际实现范围通常更小，并注意 4xxxx 参考编号与零基偏移的差异。",
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3"
+  },
+  {
+    "name": "Read Holding Registers quantity",
+    "aliases": ["读取保持寄存器数量", "读取长度", "RD_MB_DATA_LEN", "DATA_LEN", "quantity"],
+    "minimum": 1,
+    "maximum": 125,
+    "unit": "registers/request",
+    "notes": "协议级上限；具体设备和 Siemens 指令版本可能进一步限制。",
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3, function 03"
+  },
+  {
+    "name": "WR_MB_DATA_LEN",
+    "aliases": ["写入保持寄存器数量", "写入长度", "WR_MB_DATA_LEN"],
+    "minimum": 1,
+    "maximum": 121,
+    "unit": "registers/request",
+    "notes": "S7-1200 MB_CLIENT并行读写参数的写入寄存器数量范围，需同时核对指令版本和缓冲区。",
+    "model": "",
+    "source": "Siemens S7-1200 System Manual V4.6, page 938"
+  },
+  {
+    "name": "Unit Identifier",
+    "aliases": ["Unit ID", "单元标识", "从站地址", "slave id"],
+    "minimum": 0,
+    "maximum": 255,
+    "unit": "byte",
+    "notes": "TCP/串行网关场景尤其重要；直连设备如何处理该字段由设备实现决定。",
+    "model": "",
+    "source": "Modbus Messaging on TCP/IP Implementation Guide"
+  }
+]

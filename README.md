@@ -226,12 +226,19 @@ Exact 使用严格文本匹配；diagnostic 使用离线确定性规范化、同
 
 - Windows PowerShell
 - Python 3.11
-- 项目目录：`D:\autoops-rag`
-- D 盘用于虚拟环境、模型缓存、手册和索引
+- 示例命令使用 `D:\autoops-rag`，实际可放在其他目录
+- Docker Compose v2（使用容器方案时）
 
 ### 首次初始化
 
 公开仓库不包含 Siemens 手册或其他 raw manuals。执行初始化前，请先把合法取得的 PDF、Markdown 或 HTML 资料放入 `data/raw/`；不要把该目录提交到 Git。
+
+只想验证公开仓库流程时，可使用项目原创的合成示例，不需要下载第三方手册：
+
+```powershell
+New-Item -ItemType Directory -Force data/raw | Out-Null
+Copy-Item examples/demo_manual.md data/raw/demo_manual.md
+```
 
 ```powershell
 Set-Location D:\autoops-rag
@@ -287,14 +294,68 @@ Set-Location D:\autoops-rag
 .\scripts\stop.ps1
 ```
 
+### Docker Compose 启动
+
+Docker 方案使用 Qdrant Server，不会读取宿主机的 embedded `storage/qdrant`。Qdrant、处理后的 chunks、模型缓存、SQLite 和 Trace 分别保存在 named volumes 中。
+
+准备工作：
+
+1. 安装并启动 Docker Desktop，确认可使用 Docker Compose v2。
+2. 将合法取得的 PDF、Markdown 或 HTML 资料放入本地 `data/raw/`。
+3. 确保 `data/seed/` 中存在项目需要的结构化种子数据。
+4. 从示例创建本地 `.env`，真实 API Key 不会进入镜像。
+
+```powershell
+Set-Location D:\autoops-rag
+Copy-Item .env.example .env   # 已存在时不要覆盖
+docker compose config --quiet
+docker compose up --build -d
+```
+
+首次启动时，`index-init` 会等待 Qdrant Server，然后在索引缺失时解析 `data/raw/` 并构建索引。后续启动如果 chunks 数量与 Qdrant point 数一致，会跳过重建。若已存在的 Qdrant collection 与 `chunks.jsonl` 数量不一致，初始化会停止并保留原数据；只有显式设置 `FORCE_REINDEX=true` 才允许重建。
+
+演示集合默认使用 2 个目标 segment，并将 HNSW 构建阈值设为约 5 MB，可通过 `.env` 中的 `QDRANT_DEFAULT_SEGMENT_NUMBER` 和 `QDRANT_INDEXING_THRESHOLD_KB` 调整。修改后重新运行 `index-init` 会安全更新 optimizer 配置。
+
+```powershell
+docker compose ps
+docker compose logs -f index-init app
+```
+
+服务地址与原生启动相同：<http://127.0.0.1:8000/>。
+
+普通停止不会删除数据：
+
+```powershell
+docker compose down
+```
+
+资料或 embedding 配置变化后，可显式重建：
+
+```powershell
+docker compose run --rm -e FORCE_REINDEX=true index-init
+docker compose restart app
+```
+
+彻底清理 named volumes：
+
+```powershell
+docker compose down -v
+```
+
+`down -v` 会删除 Qdrant collection、processed chunks、模型缓存、SQLite 和 Trace，仅在确认可以重新生成这些数据时使用。Compose 默认只运行一个 app 实例；Qdrant REST 端口只绑定到宿主机 `127.0.0.1:6333`，当前不使用 6334 gRPC 端口。
+
 ### 测试与评测集校验
 
 ```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe scripts\validate_formal_eval.py
+.\.venv\Scripts\python.exe scripts\check_public_release.py --history
 ```
 
 不要把 full formal eval 放进默认启动流程，它可能调用外部模型并消耗额度。只调检索排序时可使用 ranking-only 评测脚本。
+
+GitHub Actions 会自动执行测试、评测集校验、发布前敏感信息扫描、Compose 校验和应用镜像构建。公开仓库后，GitHub 还会提供平台级 secret scanning；发现凭据时仍应立即撤销并轮换，不能只依赖扫描工具。
 
 ## API 示例
 
@@ -427,6 +488,8 @@ autoops-rag/
 本仓库中的项目代码使用 [MIT License](LICENSE)。
 
 MIT License 仅适用于本仓库代码，不覆盖 Siemens 手册、工业产品文档、raw manuals 或其他第三方资料。这些资料不随仓库分发。使用者需要自行确认许可并准备合法来源的文档，再执行解析、切分和索引构建流程。
+
+第三方资料、商标和 `data/seed/` 的授权边界见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，安全报告与密钥处理规则见 [SECURITY.md](SECURITY.md)。
 
 ## 相关文档
 

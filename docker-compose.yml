@@ -1,0 +1,68 @@
+name: autoops-rag
+
+x-app-environment: &app-environment
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8000"
+  QDRANT_URL: "http://qdrant:6333"
+  HF_HOME: "/app/models/huggingface"
+  HF_HUB_DISABLE_XET: "1"
+  FASTEMBED_CACHE_PATH: "/app/models/fastembed"
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: autoops-rag-app:local
+  env_file:
+    - .env
+  environment: *app-environment
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  index-init:
+    <<: *app-image
+    command: ["python", "-m", "scripts.docker_init"]
+    healthcheck:
+      disable: true
+    restart: "no"
+    depends_on:
+      qdrant:
+        condition: service_started
+    volumes:
+      - ./data/raw:/app/data/raw:ro
+      - processed_data:/app/data/processed
+      - model_cache:/app/models
+
+  app:
+    <<: *app-image
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    init: true
+    depends_on:
+      qdrant:
+        condition: service_started
+      index-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data/raw:/app/data/raw:ro
+      - ./data/seed:/app/data/seed:ro
+      - processed_data:/app/data/processed:ro
+      - model_cache:/app/models
+      - app_state:/app/storage
+      - trace_reports:/app/reports
+
+volumes:
+  qdrant_data:
+  processed_data:
+  model_cache:
+  app_state:
+  trace_reports:

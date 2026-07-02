@@ -1,0 +1,28 @@
+.git
+.gitignore
+.env
+.env.*
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.cache
+.tmp
+
+# Runtime data is mounted through Compose volumes/bind mounts.
+data/raw
+data/processed
+data/eval
+data/seed
+models
+storage
+reports
+
+# Development-only artifacts are not needed by the runtime image.
+tests
+docs
+outputs
+work
+*.log
+*.csv

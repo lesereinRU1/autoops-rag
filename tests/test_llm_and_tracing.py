@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+
 from app.agent.graph import build_graph
 from app.config import Settings
 from app.generation.answer_generator import AnswerGenerator
 from app.generation.llm_client import LLMClient, LLMClientError, LLMResult
 from app.models import Chunk, SearchHit
+from app.retrieval.vector_store import optimizer_config
 from app.service import AutoOpsService
 from app.safety import (
     classify_forbidden_facts,
@@ -63,7 +66,7 @@ class _Client:
 
 
 class _SequenceClient:
-    def __init__(self, responses: list[_Response]) -> None:
+    def __init__(self, responses: list[_Response | Exception]) -> None:
         self.responses = list(responses)
         self.requested_models: list[str] = []
 
@@ -75,7 +78,10 @@ class _SequenceClient:
 
     def post(self, *args, **kwargs) -> _Response:
         self.requested_models.append(kwargs["json"]["model"])
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_non_streaming_llm_usage_is_parsed(monkeypatch):
@@ -145,6 +151,38 @@ def test_quota_error_switches_to_next_model_once(monkeypatch):
     assert result.total_tokens == 16
 
 
+def test_transient_transport_error_retries_same_model(monkeypatch):
+    request = httpx.Request("POST", "https://example.invalid/v1/chat/completions")
+    client = _SequenceClient(
+        [
+            httpx.ConnectError("transient TLS failure", request=request),
+            _Response(
+                {
+                    "model": "qwen-plus",
+                    "choices": [{"message": {"content": "鍥炵瓟"}}],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+                }
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        "app.generation.llm_client.httpx.Client", lambda *args, **kwargs: client
+    )
+
+    result = LLMClient(
+        "https://example.invalid/v1",
+        "test-only",
+        "qwen-plus",
+        1,
+        fallback_models=["qwen3.7-plus"],
+    ).generate("prompt", retries=1)
+
+    assert client.requested_models == ["qwen-plus", "qwen-plus"]
+    assert result.calls == 2
+    assert result.attempted_models == ["qwen-plus", "qwen-plus"]
+    assert result.final_model == "qwen-plus"
+
+
 def test_all_unavailable_models_are_attempted_once_then_raise(monkeypatch):
     client = _SequenceClient(
         [
@@ -188,6 +226,19 @@ def test_model_name_and_fallbacks_are_deduplicated():
         "glm-5",
         "deepseek-r1-distill-qwen-7b",
     ]
+
+
+def test_small_qdrant_collection_uses_indexable_segments():
+    settings = Settings(
+        _env_file=None,
+        qdrant_indexing_threshold_kb=4096,
+        qdrant_default_segment_number=2,
+    )
+
+    config = optimizer_config(settings)
+
+    assert config.indexing_threshold == 4096
+    assert config.default_segment_number == 2
 
 
 def test_generator_success_is_grounded_and_records_calls():
@@ -266,18 +317,21 @@ def test_generator_error_falls_back_with_reason():
 def test_trace_is_jsonl_and_redacts_credentials(tmp_path):
     path = tmp_path / "rag_traces.jsonl"
     store = TraceStore(path)
+    fixture_token = "fixture-" + "token"
+    fixture_key = "sk-" + "fixture123"
     store.append(
         {
             "request_id": "request-1234",
-            "llm_api_key": "fixture-token",
-            "headers": {"Authorization": "Bearer fixture-token"},
-            "original_question": "Authorization: Bearer fixture-token sk-fixture123",
+            "llm_api_key": fixture_token,
+            "headers": {"Authorization": "Bearer " + fixture_token},
+            "original_question": "Authorization: Bearer " + fixture_token + " " + fixture_key,
             "attempted_models": ["qwen-plus", "glm-5"],
             "final_model": "glm-5",
         }
     )
     raw = path.read_text(encoding="utf-8")
-    assert "fixture-token" not in raw
+    assert fixture_token not in raw
+    assert fixture_key not in raw
     assert "Authorization" not in raw
     assert "Bearer" not in raw
     assert "sk-" not in raw

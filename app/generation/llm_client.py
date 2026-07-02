@@ -153,35 +153,40 @@ class LLMClient:
         self.models = list(dict.fromkeys([model, *(fallback_models or [])]))
 
     def generate(self, prompt: str, retries: int = 1) -> LLMResult:
-        """Try each configured model once; retries is retained for API compatibility."""
+        """Try fallback models once, retrying transient transport failures per model."""
         url = self.base_url + "/chat/completions"
         started = time.perf_counter()
         attempted_models: list[str] = []
         last_reason = "llm_api_error"
 
-        # `retries` previously retried the same model. It is intentionally ignored now:
-        # every candidate model is attempted at most once in this fallback sequence.
-        del retries
+        retries = max(0, int(retries))
         # The desktop environment may expose a stale HTTPS proxy. DashScope works over
         # a direct TLS connection here, so do not inherit proxy variables.
         with httpx.Client(timeout=self.timeout, trust_env=False) as client:
             for model in self.models:
-                attempted_models.append(model)
                 response_started = time.perf_counter()
                 try:
-                    response = client.post(
-                        url,
-                        headers={
-                            "Authorization": f"Bearer {self.api_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": model,
-                            "messages": [{"role": "user", "content": prompt}],
-                            "temperature": 0.1,
-                            "stream": False,
-                        },
-                    )
+                    for transport_attempt in range(retries + 1):
+                        attempted_models.append(model)
+                        try:
+                            response = client.post(
+                                url,
+                                headers={
+                                    "Authorization": f"Bearer {self.api_key}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "model": model,
+                                    "messages": [{"role": "user", "content": prompt}],
+                                    "temperature": 0.1,
+                                    "stream": False,
+                                },
+                            )
+                            break
+                        except (httpx.TimeoutException, httpx.TransportError):
+                            if transport_attempt >= retries:
+                                raise
+                            time.sleep(min(0.5 * (2**transport_attempt), 2.0))
                     unavailable_reason = _model_unavailable_reason(response)
                     if unavailable_reason:
                         last_reason = unavailable_reason

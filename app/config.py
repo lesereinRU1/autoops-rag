@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     enable_table_extraction: bool = True
     reranker_model: str = "BAAI/bge-reranker-base"
     qdrant_collection: str = "autoops_manuals"
+    qdrant_indexing_threshold_kb: int = 5000
+    qdrant_default_segment_number: int = 2
     chunk_size: int = 450
     chunk_overlap: int = 60
     enable_query_expansion: bool = False

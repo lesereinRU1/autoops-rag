@@ -9,6 +9,14 @@ from app.models import Chunk, SearchHit
 from app.retrieval.embeddings import create_embedder
 
 
+def optimizer_config(settings: Settings) -> models.OptimizersConfigDiff:
+    """Keep small demo collections indexed instead of split into full-scan segments."""
+    return models.OptimizersConfigDiff(
+        indexing_threshold=max(0, settings.qdrant_indexing_threshold_kb),
+        default_segment_number=max(1, settings.qdrant_default_segment_number),
+    )
+
+
 class VectorStore:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -44,6 +52,7 @@ class VectorStore:
             self.client.create_collection(
                 collection_name=collection,
                 vectors_config=models.VectorParams(size=self.dimension, distance=models.Distance.COSINE),
+                optimizers_config=optimizer_config(self.settings),
             )
 
         for offset in range(0, len(chunks), batch_size):

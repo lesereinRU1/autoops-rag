@@ -1,0 +1,83 @@
+[
+  {
+    "code": "16#80C8",
+    "title": "通信伙伴/从站响应超时",
+    "meaning": "在设定的监控时间内没有收到预期响应。",
+    "causes": ["对端未运行或未监听", "IP、端口、Unit ID 或串行参数不一致", "网络、接线或屏蔽问题", "请求地址或长度不被设备接受"],
+    "checks": ["保存 STATUS 和调用时序", "确认对端服务与链路", "逐项核对通信参数", "用已知可用的只读请求缩小范围"],
+    "model": "S7-1200",
+    "source": "Siemens S7-1200 System Manual V4.6（原始 PDF 不随项目分发）"
+  },
+  {
+    "code": "16#809A",
+    "title": "连接描述无效或不受支持",
+    "meaning": "CONNECT 参数结构不适用于当前接口，结构长度无效，或 InterfaceID 不正确。",
+    "causes": ["复制了其他 CPU/固件的连接结构", "连接数据类型与通信块版本不匹配", "接口标识选择错误"],
+    "checks": ["核对 CPU 与固件", "重新选择当前版本提供的数据类型", "核对本地接口 Hardware identifier"],
+    "model": "S7-1200",
+    "source": "Siemens S7-1200 System Manual V4.6"
+  },
+  {
+    "code": "16#80B1",
+    "title": "长度无效",
+    "meaning": "数据记录或目标区域的长度信息与要求不一致。",
+    "causes": ["缓冲区长度小于请求数据", "声明长度与组态长度不一致"],
+    "checks": ["核对数据类型和数组边界", "核对请求数量与字节数", "对照当前指令版本的参数表"],
+    "model": "S7-1200",
+    "source": "Siemens S7-1200 System Manual V4.6"
+  },
+  {
+    "code": "16#80B8",
+    "title": "参数错误",
+    "meaning": "模块或功能报告无效参数。",
+    "causes": ["参数超出允许范围", "实际硬件与项目组态不一致"],
+    "checks": ["在线比较硬件组态", "逐项核对参数范围", "重新编译并下载硬件组态前先审批"],
+    "model": "S7-1200",
+    "source": "Siemens S7-1200 System Manual V4.6"
+  },
+  {
+    "code": "16#80E2",
+    "title": "错误的 OB 上下文",
+    "meaning": "数据记录在不允许的组织块上下文中传送，要求在启动 OB 中执行。",
+    "causes": ["相关写入在循环 OB 中执行"],
+    "checks": ["查看该功能对 OB 的要求", "迁移前评估启动顺序并保留备份"],
+    "model": "S7-1200",
+    "source": "Siemens S7-1200 System Manual V4.6"
+  },
+  {
+    "code": "0x01",
+    "title": "Modbus Illegal Function",
+    "meaning": "服务器不支持请求中的功能码。",
+    "causes": ["功能码选择错误", "设备固件未实现该功能"],
+    "checks": ["核对设备寄存器表允许的功能码"],
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3"
+  },
+  {
+    "code": "0x02",
+    "title": "Modbus Illegal Data Address",
+    "meaning": "请求的数据地址对服务器无效。",
+    "causes": ["零基/一基地址换算错误", "访问了未实现的寄存器"],
+    "checks": ["核对参考编号与协议偏移", "缩短请求范围"],
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3"
+  },
+  {
+    "code": "0x03",
+    "title": "Modbus Illegal Data Value",
+    "meaning": "请求中的值或结构对服务器无效。",
+    "causes": ["数量超限", "写入值不被设备接受"],
+    "checks": ["核对请求数量和设备允许范围"],
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3"
+  },
+  {
+    "code": "0x04",
+    "title": "Modbus Server Device Failure",
+    "meaning": "服务器处理请求时发生不可恢复错误。",
+    "causes": ["设备内部故障", "被访问功能当前不可用"],
+    "checks": ["读取设备诊断", "保存请求报文并联系制造商"],
+    "model": "",
+    "source": "Modbus Application Protocol Specification V1.1b3"
+  }
+]

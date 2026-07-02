@@ -1,0 +1,35 @@
+{
+  "nodes": [
+    {"id": "device:s7-1200", "type": "device", "label": "S7-1200", "aliases": ["S71200", "CPU 1211C", "CPU 1212C", "CPU 1214C", "CPU 1215C", "CPU 1217C"]},
+    {"id": "device:s7-1200-g2", "type": "device", "label": "S7-1200 G2", "aliases": ["S71200 G2", "1200 G2"]},
+    {"id": "protocol:modbus-tcp", "type": "protocol", "label": "Modbus TCP", "aliases": ["Modbus/TCP", "MODBUS TCP"]},
+    {"id": "instruction:mb-client", "type": "instruction", "label": "MB_CLIENT", "aliases": ["MB CLIENT", "Modbus client"]},
+    {"id": "instruction:mb-server", "type": "instruction", "label": "MB_SERVER", "aliases": ["MB SERVER", "Modbus server"]},
+    {"id": "status:80c8", "type": "status_code", "label": "16#80C8", "aliases": ["80C8", "0x80C8"]},
+    {"id": "status:809a", "type": "status_code", "label": "16#809A", "aliases": ["809A", "0x809A"]},
+    {"id": "parameter:tcp-port", "type": "parameter", "label": "RemotePort 502", "aliases": ["TCP端口", "端口502", "port 502"]},
+    {"id": "parameter:unit-id", "type": "parameter", "label": "MB_Unit_ID", "aliases": ["Unit ID", "从站地址", "设备地址"]},
+    {"id": "parameter:data-address", "type": "parameter", "label": "MB_DATA_ADDR", "aliases": ["寄存器地址", "起始地址", "40001"]},
+    {"id": "parameter:data-length", "type": "parameter", "label": "DATA_LEN", "aliases": ["读取长度", "数据长度", "寄存器数量"]},
+    {"id": "concept:request-sequencing", "type": "concept", "label": "REQ/BUSY请求时序", "aliases": ["BUSY", "REQ", "请求排队"]},
+    {"id": "concept:citation-guard", "type": "control", "label": "引用校验", "aliases": ["chunk_id", "页码引用", "引用真实性"]},
+    {"id": "concept:human-approval", "type": "control", "label": "人工确认", "aliases": ["已验证方案", "用户确认", "human in the loop"]}
+  ],
+  "edges": [
+    {"id": "e01", "source": "device:s7-1200", "relation": "supports", "target": "protocol:modbus-tcp", "provenance": "S7-1200 System Manual"},
+    {"id": "e02", "source": "instruction:mb-client", "relation": "implements_client", "target": "protocol:modbus-tcp", "provenance": "Siemens Entry-ID 102020340"},
+    {"id": "e03", "source": "instruction:mb-server", "relation": "implements_server", "target": "protocol:modbus-tcp", "provenance": "Siemens Entry-ID 102020340"},
+    {"id": "e04", "source": "instruction:mb-client", "relation": "may_report", "target": "status:80c8", "provenance": "S7-1200 System Manual"},
+    {"id": "e05", "source": "instruction:mb-client", "relation": "may_report", "target": "status:809a", "provenance": "S7-1200 System Manual"},
+    {"id": "e06", "source": "instruction:mb-client", "relation": "configured_by", "target": "parameter:tcp-port", "provenance": "S7-1200 System Manual"},
+    {"id": "e07", "source": "instruction:mb-client", "relation": "configured_by", "target": "parameter:unit-id", "provenance": "S7-1200 System Manual"},
+    {"id": "e08", "source": "instruction:mb-client", "relation": "configured_by", "target": "parameter:data-address", "provenance": "Siemens Entry-ID 102020340"},
+    {"id": "e09", "source": "instruction:mb-client", "relation": "configured_by", "target": "parameter:data-length", "provenance": "Siemens Entry-ID 102020340"},
+    {"id": "e10", "source": "instruction:mb-client", "relation": "requires", "target": "concept:request-sequencing", "provenance": "S7-1200 System Manual"},
+    {"id": "e11", "source": "status:80c8", "relation": "check", "target": "parameter:tcp-port", "provenance": "S7-1200 diagnostic workflow"},
+    {"id": "e12", "source": "status:80c8", "relation": "check", "target": "parameter:unit-id", "provenance": "S7-1200 diagnostic workflow"},
+    {"id": "e13", "source": "status:80c8", "relation": "check", "target": "parameter:data-address", "provenance": "S7-1200 diagnostic workflow"},
+    {"id": "e14", "source": "concept:human-approval", "relation": "gates", "target": "concept:citation-guard", "provenance": "AutoOps memory policy"},
+    {"id": "e15", "source": "device:s7-1200-g2", "relation": "successor_of", "target": "device:s7-1200", "provenance": "S7-1200 G2 System Manual V1.0.1"}
+  ]
+}
