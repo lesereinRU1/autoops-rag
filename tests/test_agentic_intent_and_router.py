@@ -88,6 +88,9 @@ def test_shadow_routing_does_not_change_selected_tool_and_is_visible_in_trace():
             llm_primary_model="local",
             enable_query_expansion=False,
             enable_agentic_routing=False,
+            enable_agentic_planner=True,
+            max_agent_rounds=2,
+            max_tool_calls=4,
         ),
         memory=Memory(),
         retriever=Retriever(),
@@ -109,8 +112,16 @@ def test_shadow_routing_does_not_change_selected_tool_and_is_visible_in_trace():
     assert result["selected_tool"] == "search_manual"
     assert result["intent"]["intent"] == "table_lookup"
     assert result["candidate_plan"][0] == "lookup_table_rows"
+    assert result["plan"]["steps"][0]["tool"] == "lookup_table_rows"
+    assert result["plan"]["applied"] is False
     router_trace = next(
         item for item in result["agent_trace"] if item["node"] == "tool_router_shadow"
     )
     assert router_trace["applied"] is False
     assert router_trace["candidate_plan"][0] == "lookup_table_rows"
+    planner_trace = next(
+        item for item in result["agent_trace"] if item["node"] == "query_planner_shadow"
+    )
+    assert planner_trace["configured_enabled"] is True
+    assert planner_trace["applied"] is False
+    assert planner_trace["plan"] == result["plan"]

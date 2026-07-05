@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agent.state import AgentState
 from app.agent.intent import classify_intent
+from app.agent.planner import BoundedQueryPlanner
 from app.agent.tool_router import candidate_tools
 from app.agent.tools import format_alarm, format_parameter, format_verified_solution
 from app.generation.citation_guard import validate_citations
@@ -40,6 +41,10 @@ def build_graph(service):
     configured_model = getattr(
         service.settings, "llm_primary_model", service.settings.llm_model
     )
+    shadow_planner = BoundedQueryPlanner(
+        max_agent_rounds=getattr(service.settings, "max_agent_rounds", 2),
+        max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
+    )
 
     def analyze_request(state: AgentState) -> AgentState:
         question = state["question"]
@@ -57,6 +62,11 @@ def build_graph(service):
             version=state.get("version", ""),
         )
         candidate_plan = candidate_tools(intent_result["intent"])
+        structured_plan = shadow_planner.build_plan(
+            query=policy_question,
+            intent=intent_result["intent"],
+            candidate_tools=candidate_plan,
+        )
         alarm = extract_alarm(question)
         parameter_words = (
             "范围", "上下限", "参数", "端口", "波特率", "unit id", "寄存器地址",
@@ -98,6 +108,15 @@ def build_graph(service):
                 "candidate_plan": candidate_plan,
             },
             {
+                "node": "query_planner_shadow",
+                "shadow": True,
+                "configured_enabled": bool(
+                    getattr(service.settings, "enable_agentic_planner", False)
+                ),
+                "applied": False,
+                "plan": structured_plan,
+            },
+            {
                 "node": "knowledge_graph",
                 "matched_entities": [item["label"] for item in kg["matched_entities"]],
                 "expanded_terms": kg["expansion_terms"],
@@ -116,6 +135,7 @@ def build_graph(service):
             "selected_tool": tool,
             "intent": intent_result,
             "candidate_plan": candidate_plan,
+            "plan": structured_plan,
             "route_reason": reason,
             "knowledge_graph": kg,
             "rewritten_query": question,

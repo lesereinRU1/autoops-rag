@@ -115,7 +115,7 @@ class RagTraceResponse(BaseModel):
     evidence_sufficient: bool
     warnings: list[str] = Field(default_factory=list)
     intent: dict[str, Any] = Field(default_factory=dict)
-    plan: list[dict[str, Any]] = Field(default_factory=list)
+    plan: dict[str, Any] | list[dict[str, Any]] = Field(default_factory=dict)
     candidate_plan: list[str] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     rounds: int = 0

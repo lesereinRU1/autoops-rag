@@ -9,7 +9,7 @@ def test_agentic_state_defaults_are_fresh_and_disabled():
 
     assert first == {
         "intent": {},
-        "plan": [],
+        "plan": {},
         "candidate_plan": [],
         "tool_calls": [],
         "round_count": 0,
@@ -18,8 +18,8 @@ def test_agentic_state_defaults_are_fresh_and_disabled():
         "evidence_assessments": [],
         "agentic_enabled": False,
     }
-    first["plan"].append({"tool": "test-only"})
-    assert second["plan"] == []
+    first["plan"]["steps"] = [{"tool": "test-only"}]
+    assert second["plan"] == {}
 
 
 def test_agentic_configuration_is_disabled_and_bounded_by_default():
@@ -64,10 +64,13 @@ def test_legacy_trace_deserializes_with_agentic_defaults():
     trace = RagTraceResponse.model_validate(legacy_trace)
 
     assert trace.intent == {}
-    assert trace.plan == []
+    assert trace.plan == {}
     assert trace.candidate_plan == []
     assert trace.tool_calls == []
     assert trace.rounds == 0
     assert trace.budget == {}
     assert trace.stop_reason == ""
     assert trace.evidence_assessments == []
+
+    legacy_trace["plan"] = []
+    assert RagTraceResponse.model_validate(legacy_trace).plan == []

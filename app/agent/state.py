@@ -30,7 +30,7 @@ class AgentState(TypedDict, total=False):
     generation_usage: dict[str, Any]
     retrieval_trace: dict[str, Any]
     intent: dict[str, Any]
-    plan: list[dict[str, Any]]
+    plan: dict[str, Any] | list[dict[str, Any]]
     candidate_plan: list[str]
     tool_calls: list[dict[str, Any]]
     round_count: int
@@ -44,7 +44,7 @@ def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
     """Return fresh stage-1 Agentic fields without changing graph behavior."""
     return {
         "intent": {},
-        "plan": [],
+        "plan": {},
         "candidate_plan": [],
         "tool_calls": [],
         "round_count": 0,
