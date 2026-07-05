@@ -115,7 +115,11 @@ def run_evaluation(
     baseline_latencies: list[float] = []
     iterative_latencies: list[float] = []
     retry_count = 0
+    retry_count_before_filter = 0
+    retry_blocked_by_generic_terms = 0
     unnecessary_retries = 0
+    filtered_missing_terms_total = 0
+    generic_terms_ignored_total = 0
     budget_stop_count = 0
     loop_violation_count = 0
 
@@ -132,12 +136,21 @@ def run_evaluation(
             assessment = assess_evidence(
                 row["question"], first_hits, round_count=1, intent=intent
             )
+            would_retry_before_filter = bool(
+                assessment["retry_would_trigger_before_filter"]
+            )
+            retry_count_before_filter += int(would_retry_before_filter)
+            retry_blocked_by_generic_terms += int(
+                assessment["retry_blocked_by_generic_terms"]
+            )
+            filtered_missing_terms_total += len(assessment["filtered_missing_terms"])
+            generic_terms_ignored_total += len(assessment["generic_terms_ignored"])
 
             # Baseline mirrors the existing one-rewrite path, including replacing
             # first-round evidence with the second-round result.
             baseline_hits = first_hits
             baseline_ms = initial_ms
-            if not assessment["sufficient"]:
+            if not assessment["sufficient_before_filter"]:
                 started = time.perf_counter()
                 baseline_hits = _search(retriever, row, _legacy_rewrite(row))
                 baseline_ms += (time.perf_counter() - started) * 1000
@@ -174,7 +187,11 @@ def run_evaluation(
                 stop_reason = (
                     "evidence_sufficient"
                     if final_assessment["sufficient"]
-                    else retry_stop_reason(state, config)
+                    else retry_stop_reason(
+                        state,
+                        config,
+                        assessment=final_assessment,
+                    )
                 )
                 if stop_reason in {
                     "max_rounds_reached",
@@ -184,7 +201,11 @@ def run_evaluation(
                 }:
                     budget_stop_count += 1
             elif not assessment["sufficient"]:
-                stop_reason = retry_stop_reason(state, config)
+                stop_reason = retry_stop_reason(
+                    state,
+                    config,
+                    assessment=assessment,
+                )
                 if stop_reason in {
                     "max_rounds_reached",
                     "max_rewrites_reached",
@@ -209,6 +230,10 @@ def run_evaluation(
                     "id": row["id"],
                     "intent": intent,
                     "assessment": assessment,
+                    "retry_would_trigger_before_filter": would_retry_before_filter,
+                    "retry_blocked_by_generic_terms": assessment[
+                        "retry_blocked_by_generic_terms"
+                    ],
                     "retry_triggered": retried,
                     "unnecessary_retry": unnecessary,
                     "rounds": rounds,
@@ -256,8 +281,17 @@ def run_evaluation(
     total = len(answerable)
     metrics = {
         "total_cases": total,
+        "retry_trigger_count_before_filter": retry_count_before_filter,
+        "retry_trigger_count": retry_count,
+        "retry_blocked_by_generic_terms": retry_blocked_by_generic_terms,
+        "generic_term_retry_block_count": retry_blocked_by_generic_terms,
+        "retry_trigger_rate_before_filter": round(retry_count_before_filter / total, 4) if total else None,
+        "retry_trigger_rate_after_filter": round(retry_count / total, 4) if total else None,
         "retry_trigger_rate": round(retry_count / total, 4) if total else None,
+        "unnecessary_retry_count": unnecessary_retries,
         "unnecessary_retry_rate": round(unnecessary_retries / retry_count, 4) if retry_count else 0.0,
+        "filtered_missing_terms_avg": round(filtered_missing_terms_total / total, 4) if total else None,
+        "generic_terms_ignored_avg": round(generic_terms_ignored_total / total, 4) if total else None,
         "iterative_retrieval_gain": round(
             iterative_metrics["strict_recall@5"] - baseline_metrics["strict_recall@5"], 4
         ),
@@ -290,8 +324,10 @@ def run_evaluation(
         "answers_generated": False,
         "metrics": metrics,
         "metric_notes": {
-            "iterative_retrieval_gain": "Iterative minus baseline Strict Recall@5.",
+            "iterative_retrieval_gain": "Filtered candidate minus legacy one-rewrite baseline Strict Recall@5; gain may come from avoiding an unnecessary retry.",
             "unnecessary_retry_rate": "Retries whose first-round Top5 already contained all human gold chunks / all retries.",
+            "retry_trigger_rate_before_filter": "Counterfactual trigger rate using the pre-filter identifier gate.",
+            "retry_blocked_by_generic_terms": "Retries blocked because every missing identifier was generic.",
             "scope": "Retrieval evidence only; this is not final answer accuracy.",
         },
         "details": case_details,
@@ -303,8 +339,16 @@ def render_markdown(report: dict[str, Any]) -> str:
     metrics = report["metrics"]
     labels = {
         "total_cases": "Total Cases",
+        "retry_trigger_count_before_filter": "Retry Trigger Count Before Filtering",
+        "retry_trigger_count": "Retry Trigger Count After Filtering",
+        "generic_term_retry_block_count": "Generic Term Retry Block Count",
+        "retry_trigger_rate_before_filter": "Retry Trigger Rate Before Filtering",
+        "retry_trigger_rate_after_filter": "Retry Trigger Rate After Filtering",
         "retry_trigger_rate": "Retry Trigger Rate",
+        "unnecessary_retry_count": "Unnecessary Retry Count",
         "unnecessary_retry_rate": "Unnecessary Retry Rate",
+        "filtered_missing_terms_avg": "Filtered Missing Terms Avg",
+        "generic_terms_ignored_avg": "Generic Terms Ignored Avg",
         "iterative_retrieval_gain": "Iterative Retrieval Gain",
         "strict_recall@5_baseline": "Strict Recall@5 Baseline",
         "strict_recall@5_iterative": "Strict Recall@5 Iterative",
@@ -347,6 +391,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "- Baseline mirrors the existing bounded one-rewrite behavior.",
             "- Iterative mode retries only after an insufficient evidence assessment and merges both rounds by `chunk_id`.",
+            "- Identifier filtering is deterministic and rule-based; no LLM is used to decide retries.",
+            "- Generic terms such as `0`, `PLC`, `manual`, `手册` and broad device names do not justify a retry by themselves.",
             "- Latency and retry rates must be considered alongside retrieval gain.",
             "- Safety and out-of-scope cases are policy checks and never execute retrieval in this evaluation.",
             "",

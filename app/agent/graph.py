@@ -347,6 +347,7 @@ def build_graph(service):
             round_count=next_round,
             intent=intent_name,
             identifiers_supported=service.evidence_supports_query(query, evidence),
+            apply_retry_filter=iterative_enabled,
         )
         identifiers_supported = bool(assessment["identifiers_supported"])
         sufficient = bool(assessment["sufficient"])
@@ -374,7 +375,11 @@ def build_graph(service):
         elif iterative_enabled and retry_allowed:
             stop_reason = ""
         elif iterative_enabled:
-            stop_reason = retry_stop_reason(decision_state, service.settings)
+            stop_reason = retry_stop_reason(
+                decision_state,
+                service.settings,
+                assessment=assessment,
+            )
         elif state.get("retry_count", 0) >= 1:
             stop_reason = "insufficient_evidence"
         else:
@@ -393,6 +398,9 @@ def build_graph(service):
             "evidence_score": round(top_score, 8),
             "evidence_passed": sufficient,
             "stop_reason": stop_reason,
+            "raw_missing_terms": assessment["raw_missing_terms"],
+            "filtered_missing_terms": assessment["filtered_missing_terms"],
+            "generic_terms_ignored": assessment["generic_terms_ignored"],
         }
         retrieval_rounds_trace = [
             *state.get("retrieval_rounds_trace", []),
@@ -417,6 +425,10 @@ def build_graph(service):
                 "retry_count": state.get("retry_count", 0),
                 "reason": assessment["reason"],
                 "recommended_next_action": assessment["recommended_next_action"],
+                "retry_eligible": assessment["retry_eligible"],
+                "raw_missing_terms": assessment["raw_missing_terms"],
+                "filtered_missing_terms": assessment["filtered_missing_terms"],
+                "generic_terms_ignored": assessment["generic_terms_ignored"],
             }
         )
         next_state = {

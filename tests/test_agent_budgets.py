@@ -18,6 +18,9 @@ def _config(**overrides):
 
 ASSESSMENT = {
     "sufficient": False,
+    "reason": "missing_identifier",
+    "filtered_missing_terms": ["MB_CLIENT"],
+    "retry_eligible": True,
     "recommended_next_action": "rewrite_and_retry",
 }
 
@@ -56,4 +59,3 @@ def test_policy_intents_cannot_retry():
     assert not should_retry_retrieval(out, ASSESSMENT, _config(), now=11.0)
     assert retry_stop_reason(safety, _config(), now=11.0) == "safety_blocked"
     assert retry_stop_reason(out, _config(), now=11.0) == "out_of_scope"
-

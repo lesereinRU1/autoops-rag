@@ -4,11 +4,18 @@ import re
 import time
 from typing import Any
 
+from app.agent.evidence_terms import (
+    filter_retry_identifiers,
+    generic_terms_in_text,
+    normalize_technical_terms,
+)
 from app.models import SearchHit
 from app.retrieval.query_expansion import technical_terms
 
 
 POLICY_INTENTS = frozenset({"safety_risk", "out_of_scope"})
+NON_RETRY_REASONS = frozenset({"out_of_scope", "version_conflict", "safety"})
+EXPLICIT_REPAIRABLE_REASONS = frozenset({"missing_subtopic"})
 
 
 def _config(config: Any, name: str, default: Any) -> Any:
@@ -24,45 +31,99 @@ def assess_evidence(
     round_count: int,
     intent: str = "",
     identifiers_supported: bool | None = None,
+    apply_retry_filter: bool = True,
 ) -> dict[str, Any]:
     """Wrap the existing gate conditions in an auditable assessment."""
     top_score = (
         float(evidence[0].rerank_score or evidence[0].score) if evidence else 0.0
     )
-    query_terms = technical_terms(query) - {"1200", "1500"}
+    query_terms = technical_terms(query)
     evidence_terms = (
         set().union(*(technical_terms(hit.chunk.text) for hit in evidence))
         if evidence
         else set()
     )
-    missing_terms = sorted(query_terms - evidence_terms)
+    query_candidates = {
+        *normalize_technical_terms(list(query_terms)),
+        *generic_terms_in_text(query),
+    }
+    evidence_candidates: set[str] = set()
+    for hit in evidence:
+        evidence_candidates.update(
+            normalize_technical_terms(list(technical_terms(hit.chunk.text)))
+        )
+        evidence_candidates.update(generic_terms_in_text(hit.chunk.text))
+    evidence_candidate_keys = {term.casefold() for term in evidence_candidates}
+    raw_missing_terms = normalize_technical_terms(
+        sorted(
+            term
+            for term in query_candidates
+            if term.casefold() not in evidence_candidate_keys
+        )
+    )
+    filtered_missing_terms = filter_retry_identifiers(raw_missing_terms)
+    filtered_keys = {term.casefold() for term in filtered_missing_terms}
+    generic_terms_ignored = [
+        term for term in raw_missing_terms if term.casefold() not in filtered_keys
+    ]
     if identifiers_supported is None:
+        legacy_query_terms = query_terms - {"1200", "1500"}
         identifiers_supported = (
             True
-            if not query_terms
-            else len(query_terms & evidence_terms) / len(query_terms) >= 0.75
+            if not legacy_query_terms
+            else len(legacy_query_terms & evidence_terms) / len(legacy_query_terms)
+            >= 0.75
         )
 
-    if intent == "out_of_scope":
+    sufficient_before_filter = bool(evidence) and top_score > 0.01 and bool(
+        identifiers_supported
+    )
+    generic_only_gap = bool(raw_missing_terms) and not filtered_missing_terms
+    effective_identifiers_supported = bool(identifiers_supported)
+    if apply_retry_filter and generic_only_gap:
+        effective_identifiers_supported = True
+
+    if intent == "safety_risk":
+        reason = "safety"
+        sufficient = False
+    elif intent == "out_of_scope":
         reason = "out_of_scope"
         sufficient = False
-        next_action = "refuse"
     elif not evidence:
         reason = "no_evidence"
         sufficient = False
-        next_action = "rewrite_and_retry"
-    elif not identifiers_supported:
+    elif not effective_identifiers_supported:
         reason = "missing_identifier"
         sufficient = False
-        next_action = "rewrite_and_retry"
     elif top_score <= 0.01:
         reason = "low_relevance"
         sufficient = False
-        next_action = "rewrite_and_retry"
     else:
         reason = "sufficient"
         sufficient = True
+
+    retry_eligible = bool(
+        not sufficient
+        and filtered_missing_terms
+        and reason not in NON_RETRY_REASONS
+    )
+    if sufficient:
         next_action = "generate"
+    elif retry_eligible:
+        next_action = "rewrite_and_retry"
+    else:
+        next_action = "refuse"
+
+    retry_would_trigger_before_filter = bool(
+        not sufficient_before_filter
+        and reason not in NON_RETRY_REASONS
+        and (raw_missing_terms or reason in {"no_evidence", "low_relevance"})
+    )
+    retry_blocked_by_generic_terms = bool(
+        retry_would_trigger_before_filter
+        and generic_only_gap
+        and not retry_eligible
+    )
 
     return {
         "round": round_count,
@@ -70,8 +131,16 @@ def assess_evidence(
         "reason": reason,
         "score": round(top_score, 8),
         "evidence_count": len(evidence),
-        "missing_terms": missing_terms,
-        "identifiers_supported": identifiers_supported,
+        "missing_terms": filtered_missing_terms,
+        "raw_missing_terms": raw_missing_terms,
+        "filtered_missing_terms": filtered_missing_terms,
+        "generic_terms_ignored": generic_terms_ignored,
+        "identifiers_supported": effective_identifiers_supported,
+        "identifiers_supported_before_filter": bool(identifiers_supported),
+        "sufficient_before_filter": sufficient_before_filter,
+        "retry_eligible": retry_eligible,
+        "retry_would_trigger_before_filter": retry_would_trigger_before_filter,
+        "retry_blocked_by_generic_terms": retry_blocked_by_generic_terms,
         "recommended_next_action": next_action,
     }
 
@@ -116,6 +185,16 @@ def should_retry_retrieval(
         return False
     if assessment.get("recommended_next_action") != "rewrite_and_retry":
         return False
+    if assessment.get("generic_terms_ignored") and not assessment.get(
+        "filtered_missing_terms"
+    ):
+        return False
+    if not assessment.get("retry_eligible", False) and assessment.get(
+        "reason"
+    ) not in EXPLICIT_REPAIRABLE_REASONS:
+        return False
+    if assessment.get("reason") in NON_RETRY_REASONS:
+        return False
     intent = state.get("intent", {})
     intent_name = intent.get("intent", "") if isinstance(intent, dict) else str(intent)
     if intent_name in POLICY_INTENTS or state.get("refusal_reason"):
@@ -140,7 +219,11 @@ def should_retry_retrieval(
 
 
 def retry_stop_reason(
-    state: dict[str, Any], config: Any, *, now: float | None = None
+    state: dict[str, Any],
+    config: Any,
+    *,
+    assessment: dict[str, Any] | None = None,
+    now: float | None = None,
 ) -> str:
     intent = state.get("intent", {})
     intent_name = intent.get("intent", "") if isinstance(intent, dict) else str(intent)
@@ -148,6 +231,10 @@ def retry_stop_reason(
         return "safety_blocked"
     if intent_name == "out_of_scope" or state.get("refusal_kind") == "unanswerable_scope":
         return "out_of_scope"
+    if assessment and assessment.get("generic_terms_ignored") and not assessment.get(
+        "filtered_missing_terms"
+    ):
+        return "generic_terms_only"
     current = time.monotonic() if now is None else now
     started = float(state.get("agent_started_at", current))
     if current - started >= float(_config(config, "agent_timeout_seconds", 60.0)):
@@ -176,7 +263,7 @@ def build_retry_query(
     context = [
         state.get("model", ""),
         state.get("version", ""),
-        *assessment.get("missing_terms", []),
+        *assessment.get("filtered_missing_terms", assessment.get("missing_terms", [])),
         "故障诊断",
         "参数",
         "手册",

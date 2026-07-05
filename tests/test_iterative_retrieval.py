@@ -5,6 +5,8 @@ from app.agent.iterative import (
     assess_evidence,
     build_retry_query,
     merge_evidence_rounds,
+    retry_stop_reason,
+    should_retry_retrieval,
 )
 from app.models import Chunk, SearchHit
 from scripts.eval_iterative_retrieval import render_markdown, run_evaluation
@@ -113,6 +115,9 @@ def test_structured_evidence_assessment_and_retry_query():
     assert empty["sufficient"] is False
     assert empty["reason"] == "no_evidence"
     assert empty["recommended_next_action"] == "rewrite_and_retry"
+    assert set(empty["raw_missing_terms"]) == {"MB_CLIENT", "参数"}
+    assert empty["filtered_missing_terms"] == ["MB_CLIENT"]
+    assert empty["generic_terms_ignored"] == ["参数"]
 
     hit = _hit("good", "MB_CLIENT 参数说明")
     sufficient = assess_evidence("MB_CLIENT 参数", [hit], round_count=2)
@@ -125,6 +130,57 @@ def test_structured_evidence_assessment_and_retry_query():
     )
     assert "MB_CLIENT" in rewritten
     assert "S7-1200" in rewritten
+
+
+def test_generic_only_missing_terms_do_not_trigger_retry():
+    config = SimpleNamespace(
+        enable_iterative_retrieval=True,
+        max_agent_rounds=2,
+        max_tool_calls=4,
+        agent_timeout_seconds=60.0,
+        max_rewrites=1,
+    )
+    state = {
+        "intent": {"intent": "general_manual_search"},
+        "round_count": 1,
+        "retry_count": 0,
+        "tool_calls": [],
+        "agent_started_at": 10.0,
+    }
+    assessment = assess_evidence(
+        "PLC 手册 参数 故障 0",
+        [],
+        round_count=1,
+    )
+    assert assessment["filtered_missing_terms"] == []
+    assert set(assessment["generic_terms_ignored"]) >= {"PLC", "0"}
+    assert assessment["retry_eligible"] is False
+    assert assessment["retry_blocked_by_generic_terms"] is True
+    assert not should_retry_retrieval(state, assessment, config, now=11.0)
+    assert (
+        retry_stop_reason(state, config, assessment=assessment, now=11.0)
+        == "generic_terms_only"
+    )
+
+
+def test_discriminative_missing_identifier_can_retry_with_budget():
+    config = SimpleNamespace(
+        enable_iterative_retrieval=True,
+        max_agent_rounds=2,
+        max_tool_calls=4,
+        agent_timeout_seconds=60.0,
+        max_rewrites=1,
+    )
+    state = {
+        "intent": {"intent": "parameter_lookup"},
+        "round_count": 1,
+        "retry_count": 0,
+        "tool_calls": [],
+        "agent_started_at": 10.0,
+    }
+    assessment = assess_evidence("MB_CLIENT 参数", [], round_count=1)
+    assert assessment["filtered_missing_terms"] == ["MB_CLIENT"]
+    assert should_retry_retrieval(state, assessment, config, now=11.0)
 
 
 def test_merge_evidence_rounds_deduplicates_by_chunk_id_and_keeps_best_score():
@@ -153,6 +209,9 @@ def test_enabled_retries_only_when_insufficient_and_records_trace():
     assert result["rewritten_queries"]
     assert len(result["evidence_assessments"]) == 2
     assert len(result["retrieval_rounds_trace"]) == 2
+    assert "raw_missing_terms" in result["evidence_assessments"][0]
+    assert "filtered_missing_terms" in result["retrieval_rounds_trace"][0]
+    assert "generic_terms_ignored" in result["retrieval_rounds_trace"][0]
     assert result["stop_reason"] == "evidence_sufficient"
 
     service, calls = _service([[good]], enabled=True)
