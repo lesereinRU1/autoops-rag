@@ -27,6 +27,17 @@ class SearchHit(BaseModel):
     rerank_score: float | None = None
 
 
+class ToolResult(BaseModel):
+    tool: str
+    success: bool = False
+    content: str = ""
+    evidence: list[SearchHit] = Field(default_factory=list)
+    provenance: list[dict[str, Any]] = Field(default_factory=list)
+    latency_ms: float = 0.0
+    error: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class SearchRequest(BaseModel):
     query: str = Field(
         min_length=1,

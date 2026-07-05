@@ -3,6 +3,17 @@ from __future__ import annotations
 from app.agent.intent import IntentName
 
 
+TOOL_WHITELIST = frozenset(
+    {
+        "lookup_fault_code",
+        "lookup_parameter",
+        "lookup_table_rows",
+        "search_manual",
+        "lookup_verified_solution",
+    }
+)
+
+
 TOOL_CANDIDATES: dict[IntentName, tuple[str, ...]] = {
     "alarm_diagnosis": (
         "lookup_fault_code",
