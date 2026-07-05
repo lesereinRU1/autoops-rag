@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     model_fallbacks: str = ""
     llm_timeout_seconds: float = 40.0
     llm_transport_retries: int = 1
+    enable_agentic_rag: bool = False
+    enable_agentic_routing: bool = False
+    enable_agentic_planner: bool = False
+    enable_sqlite_table_tool: bool = False
+    enable_iterative_retrieval: bool = False
+    max_agent_rounds: int = 2
+    max_tool_calls: int = 4
+    max_llm_calls: int = 2
+    agent_timeout_seconds: float = 60.0
+    max_rewrites: int = 1
 
     @property
     def llm_primary_model(self) -> str:

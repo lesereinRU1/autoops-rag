@@ -29,3 +29,25 @@ class AgentState(TypedDict, total=False):
     query_expansion_terms: list[str]
     generation_usage: dict[str, Any]
     retrieval_trace: dict[str, Any]
+    intent: dict[str, Any]
+    plan: list[dict[str, Any]]
+    tool_calls: list[dict[str, Any]]
+    round_count: int
+    budget: dict[str, Any]
+    stop_reason: str
+    evidence_assessments: list[dict[str, Any]]
+    agentic_enabled: bool
+
+
+def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
+    """Return fresh stage-1 Agentic fields without changing graph behavior."""
+    return {
+        "intent": {},
+        "plan": [],
+        "tool_calls": [],
+        "round_count": 0,
+        "budget": {},
+        "stop_reason": "",
+        "evidence_assessments": [],
+        "agentic_enabled": enabled,
+    }

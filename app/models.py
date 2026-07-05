@@ -103,6 +103,13 @@ class RagTraceResponse(BaseModel):
     refused: bool
     evidence_sufficient: bool
     warnings: list[str] = Field(default_factory=list)
+    intent: dict[str, Any] = Field(default_factory=dict)
+    plan: list[dict[str, Any]] = Field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    rounds: int = 0
+    budget: dict[str, Any] = Field(default_factory=dict)
+    stop_reason: str = ""
+    evidence_assessments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

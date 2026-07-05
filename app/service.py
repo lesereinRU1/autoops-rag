@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 
 from app.agent.graph import build_graph
+from app.agent.state import agentic_state_defaults
 from app.agent.memory import MemoryStore
 from app.config import PROJECT_ROOT, get_settings
 from app.concurrency import ReadWriteLock
@@ -214,6 +215,9 @@ class AutoOpsService:
         graph_input.pop("query")
         graph_input["question"] = resolved_question
         graph_input["original_question"] = original_question
+        graph_input.update(
+            agentic_state_defaults(enabled=self.settings.enable_agentic_rag)
+        )
         with self.access.read():
             state = self.graph.invoke(graph_input)
         _, warnings = validate_citations(state["answer"], state.get("evidence", []))
@@ -291,6 +295,13 @@ class AutoOpsService:
             "refused": bool(state.get("refusal_reason")) or not state.get("evidence_sufficient", False),
             "evidence_sufficient": state.get("evidence_sufficient", False),
             "warnings": warnings,
+            "intent": state.get("intent", {}),
+            "plan": state.get("plan", []),
+            "tool_calls": state.get("tool_calls", []),
+            "rounds": state.get("round_count", 0),
+            "budget": state.get("budget", {}),
+            "stop_reason": state.get("stop_reason", ""),
+            "evidence_assessments": state.get("evidence_assessments", []),
         }
         rag_trace = self.traces.append(rag_trace)
         return ChatResponse(
