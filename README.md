@@ -80,6 +80,8 @@ flowchart LR
 
 ## 一次问答如何执行
 
+LangGraph 的节点职责、条件边和有界回退说明见 [LangGraph 工作流设计](docs/agent-workflow.md)。
+
 1. FastAPI 接收问题并生成 `request_id`。
 2. 范围与安全检查先识别危险操作、其他厂商/型号以及版本不足问题。
 3. LangGraph 根据问题选择故障码、参数范围或手册检索工具。
@@ -524,6 +526,7 @@ MIT License 仅适用于本仓库代码，不覆盖 Siemens 手册、工业产�
 ## 相关文档
 
 - [评测说明](docs/evaluation.md)
+- [LangGraph 工作流设计](docs/agent-workflow.md)
 - [向量库选型](docs/ADR-001-vector-store-selection.md)
 - [60 题排序分析](reports/ranking_analysis_60.md)
 - [Trace 字段差距分析](reports/trace_gap_analysis.md)

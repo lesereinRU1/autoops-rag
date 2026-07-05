@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agent.state import AgentState
 from app.agent.tools import format_alarm, format_parameter, format_verified_solution
+from app.generation.citation_guard import validate_citations
 from app.retrieval.query_expansion import expand_query
 from app.safety import format_policy_refusal
 
@@ -38,7 +39,7 @@ def build_graph(service):
         service.settings, "llm_primary_model", service.settings.llm_model
     )
 
-    def parse(state: AgentState) -> AgentState:
+    def analyze_request(state: AgentState) -> AgentState:
         question = state["question"]
         policy_question = state.get("original_question", question)
         refusal = service.scope_refusal(
@@ -65,6 +66,13 @@ def build_graph(service):
 
         kg = service.memory.expand_knowledge_graph(question)
         trace = [
+            {
+                "node": "query_analyze",
+                "alarm_code": alarm or "",
+                "parameter_intent": tool == "check_parameter_range",
+                "device_model": state.get("model", "S7-1200"),
+                "version": state.get("version", ""),
+            },
             {"node": "route", "tool": tool, "reason": reason},
             {
                 "node": "knowledge_graph",
@@ -73,15 +81,14 @@ def build_graph(service):
                 "relations": len(kg["relations"]),
             },
         ]
-        if refusal_reason:
-            trace.append(
-                {
-                    "node": "scope_and_safety_gate",
-                    "accepted": False,
-                    "category": refusal_kind,
-                    "reason": refusal_reason,
-                }
-            )
+        trace.append(
+            {
+                "node": "scope_and_safety_gate",
+                "accepted": not bool(refusal_reason),
+                "category": refusal_kind,
+                "reason": refusal_reason,
+            }
+        )
         return {
             "selected_tool": tool,
             "route_reason": reason,
@@ -94,7 +101,7 @@ def build_graph(service):
             "refusal_kind": refusal_kind,
         }
 
-    def after_parse(state: AgentState) -> str:
+    def after_policy_gate(state: AgentState) -> str:
         return "generate_refusal" if state.get("refusal_reason") else "execute"
 
     def generate_refusal(state: AgentState) -> AgentState:
@@ -127,11 +134,9 @@ def build_graph(service):
             "retrieval_trace": {},
         }
 
-    def execute(state: AgentState) -> AgentState:
-        query = state.get("rewritten_query", state["question"])
+    def execute_tool(state: AgentState) -> AgentState:
         original_question = state["question"]
         model = state.get("model", "S7-1200")
-        version = state.get("version", "")
         tool = state["selected_tool"]
         trace = list(state.get("agent_trace", []))
         result_parts: list[str] = []
@@ -155,13 +160,37 @@ def build_graph(service):
             trace.append({"node": "verified_memory", "decision": "no_verified_match"})
 
         if tool == "lookup_alarm_code":
-            record = service.memory.lookup_alarm(extract_alarm(query) or query, model)
+            record = service.memory.lookup_alarm(extract_alarm(original_question) or original_question, model)
             result_parts.append(format_alarm(record))
         elif tool == "check_parameter_range":
-            value_match = VALUE_PATTERN.search(query.replace("S7-1200", ""))
+            value_match = VALUE_PATTERN.search(original_question.replace("S7-1200", ""))
             value = float(value_match.group(1)) if value_match else None
-            record = service.find_parameter(query, model)
+            record = service.find_parameter(original_question, model)
             result_parts.append(format_parameter(record, value))
+
+        trace.append(
+            {
+                "node": "tool_execute",
+                "tool": tool,
+                "structured_result": bool(result_parts),
+                "verified_solution_used": verified_used,
+            }
+        )
+        return {
+            "tool_result": "\n\n".join(part for part in result_parts if part),
+            "agent_trace": trace,
+            "verified_solution_used": verified_used,
+            "verified_source_chunk_ids": (
+                list(verified.get("source_chunk_ids", [])) if verified else []
+            ),
+        }
+
+    def retrieve(state: AgentState) -> AgentState:
+        query = state.get("rewritten_query", state["question"])
+        model = state.get("model", "S7-1200")
+        version = state.get("version", "")
+        tool = state["selected_tool"]
+        trace = list(state.get("agent_trace", []))
 
         raw_kg_terms = state.get("knowledge_graph", {}).get("expansion_terms", [])
         # Graph expansion is intentionally conservative: broad one-hop expansion can
@@ -178,8 +207,9 @@ def build_graph(service):
         previous_retrieval_ms = float(state.get("retrieval_trace", {}).get("latency_ms", 0.0))
         retrieval_trace["round_latency_ms"] = round(round_retrieval_ms, 2)
         retrieval_trace["latency_ms"] = round(previous_retrieval_ms + round_retrieval_ms, 2)
-        if verified:
-            verified_evidence = service.chunks_by_ids(verified.get("source_chunk_ids", []))
+        verified_source_chunk_ids = state.get("verified_source_chunk_ids", [])
+        if verified_source_chunk_ids:
+            verified_evidence = service.chunks_by_ids(verified_source_chunk_ids)
             seen: set[str] = set()
             evidence = [
                 hit
@@ -211,15 +241,13 @@ def build_graph(service):
             }
         )
         return {
-            "tool_result": "\n\n".join(part for part in result_parts if part),
             "evidence": evidence,
             "evidence_sufficient": sufficient,
             "agent_trace": trace,
-            "verified_solution_used": verified_used,
             "retrieval_trace": retrieval_trace,
         }
 
-    def after_execute(state: AgentState) -> str:
+    def after_evidence_gate(state: AgentState) -> str:
         if state.get("evidence_sufficient") or state.get("retry_count", 0) >= 1:
             return "generate_answer"
         return "rewrite"
@@ -275,22 +303,70 @@ def build_graph(service):
             },
         }
 
+    def citation_guard(state: AgentState) -> AgentState:
+        evidence = state.get("evidence", [])
+        answer = state.get("answer", "")
+        valid, warnings = validate_citations(answer, evidence)
+        trace = list(state.get("agent_trace", []))
+        action = "accept"
+        generation_usage = dict(state.get("generation_usage", {}))
+        if not valid:
+            fallback = service.generator.generate(
+                state["question"],
+                evidence,
+                state.get("tool_result", ""),
+                allow_llm=False,
+            )
+            answer = fallback.answer
+            final_valid, final_warnings = validate_citations(answer, evidence)
+            action = "fallback_local_extractive"
+            warnings = final_warnings
+            generation_usage.update(
+                {
+                    "mode": fallback.mode,
+                    "final_model": "",
+                    "fallback_reason": "citation_guard_failed",
+                    "token_usage_missing_reason": "citation_guard_failed",
+                }
+            )
+            valid = final_valid
+        trace.append(
+            {
+                "node": "citation_guard",
+                "valid": valid,
+                "action": action,
+                "warnings": warnings,
+            }
+        )
+        return {
+            "answer": answer,
+            "agent_trace": trace,
+            "citation_warnings": warnings,
+            "generation_usage": generation_usage,
+        }
+
     graph = StateGraph(AgentState)
-    graph.add_node("parse", parse)
-    graph.add_node("execute", execute)
+    graph.add_node("analyze_request", analyze_request)
+    graph.add_node("execute_tool", execute_tool)
+    graph.add_node("retrieve", retrieve)
     graph.add_node("rewrite", rewrite)
     graph.add_node("generate_answer", generate_answer)
+    graph.add_node("citation_guard", citation_guard)
     graph.add_node("generate_refusal", generate_refusal)
-    graph.add_edge(START, "parse")
+    graph.add_edge(START, "analyze_request")
     graph.add_conditional_edges(
-        "parse", after_parse, {"execute": "execute", "generate_refusal": "generate_refusal"}
+        "analyze_request",
+        after_policy_gate,
+        {"execute": "execute_tool", "generate_refusal": "generate_refusal"},
     )
+    graph.add_edge("execute_tool", "retrieve")
     graph.add_conditional_edges(
-        "execute",
-        after_execute,
+        "retrieve",
+        after_evidence_gate,
         {"generate_answer": "generate_answer", "rewrite": "rewrite"},
     )
-    graph.add_edge("rewrite", "execute")
-    graph.add_edge("generate_answer", END)
+    graph.add_edge("rewrite", "retrieve")
+    graph.add_edge("generate_answer", "citation_guard")
+    graph.add_edge("citation_guard", END)
     graph.add_edge("generate_refusal", END)
     return graph.compile()

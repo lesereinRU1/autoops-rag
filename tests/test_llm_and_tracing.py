@@ -510,6 +510,24 @@ def test_current_unsafe_turn_cannot_be_diluted_by_safe_conversation_history():
     assert result["generation_usage"]["external_calls"] == 0
 
 
+def test_agent_graph_exposes_explicit_control_and_quality_nodes():
+    service = object.__new__(AutoOpsService)
+    service.settings = SimpleNamespace(llm_model="qwen-plus")
+
+    graph = build_graph(service)
+    nodes = set(graph.get_graph().nodes)
+
+    assert {
+        "analyze_request",
+        "execute_tool",
+        "retrieve",
+        "rewrite",
+        "generate_answer",
+        "citation_guard",
+        "generate_refusal",
+    }.issubset(nodes)
+
+
 def test_current_formal_unsafe_and_unanswerable_policy_cases_pass():
     dataset = Path(__file__).resolve().parents[1] / "data" / "eval" / "formal_questions.jsonl"
     rows = [

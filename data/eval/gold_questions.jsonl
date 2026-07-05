@@ -1,0 +1,15 @@
+{"id":"g001","category":"alarm","question":"S7-1200 使用 MB_CLIENT 出现 16#80C8，应该如何排查？","model":"S7-1200","expected_tool":"lookup_alarm_code","gold_chunk_ids":["autoops_故障排查流程_3b38e4eccb_0001_0003"]}
+{"id":"g002","category":"role","question":"MB_CLIENT 和 MB_SERVER 分别是什么通信角色？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["siemens_modbus_tcp_s7_1200_s7_1500_aa18f71c8e_0006_0008","siemens_modbus_tcp_s7_1200_s7_1500_aa18f71c8e_0013_0015"]}
+{"id":"g003","category":"alarm","question":"16#809A 与 CONNECT 和 InterfaceID 有什么关系？","model":"S7-1200","expected_tool":"lookup_alarm_code","gold_chunk_ids":["autoops_故障排查流程_3b38e4eccb_0001_0004"]}
+{"id":"g004","category":"parameter","question":"Modbus TCP 的 RemotePort 参数默认值是多少？","model":"S7-1200","expected_tool":"check_parameter_range","gold_chunk_ids":["siemens_s7_1200_system_manual_v4_6_5513d52763_0943_2133"]}
+{"id":"g005","category":"addressing","question":"40001 和 Modbus 协议报文地址为什么可能差一？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001"]}
+{"id":"g006","category":"function_code","question":"读取保持寄存器通常使用哪个功能码？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"]}
+{"id":"g007","category":"data_layout","question":"为什么一个32位浮点数通常占两个16位寄存器？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"]}
+{"id":"g008","category":"procedure","question":"BUSY 为真时可以持续触发新的 REQ 上升沿吗？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_故障排查流程_3b38e4eccb_0001_0005"]}
+{"id":"g009","category":"safety","question":"为什么不能让助手直接执行强制输出或旁路联锁？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_中文操作与安全边界_a52df96344_0001_0003"]}
+{"id":"g010","category":"memory","question":"为什么只有用户确认有效的方案才能进入长期记忆？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_中文操作与安全边界_a52df96344_0001_0004"]}
+{"id":"g011","category":"procedure","question":"通信异常应该按照哪些层次排查？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_故障排查流程_3b38e4eccb_0001_0002"]}
+{"id":"g012","category":"citation","question":"回答为什么需要同时给出页码和 chunk_id？","model":"S7-1200","expected_tool":"search_manual","gold_chunk_ids":["autoops_中文操作与安全边界_a52df96344_0001_0004"]}
+{"id":"g013","category":"table","question":"在表格中，MB_MODE=0、MB_DATA_ADDR=40,001 对应的 MB_DATA_LEN 和 Modbus function 是什么？","model":"S7-1200","expected_tool":"check_parameter_range","gold_chunk_ids":["siemens_s7_1200_system_manual_v4_6_5513d52763_0969_8269"]}
+{"id":"g014","category":"table","question":"RD_MB_DATA_LEN 允许读取多少个寄存器？","model":"S7-1200","expected_tool":"check_parameter_range","gold_chunk_ids":["siemens_s7_1200_system_manual_v4_6_5513d52763_0938_8104"]}
+{"id":"g015","category":"table","question":"MB_CLIENT 状态码 80C8 在协议错误表中表示什么？","model":"S7-1200","expected_tool":"lookup_alarm_code","gold_chunk_ids":["siemens_s7_1200_system_manual_v4_6_5513d52763_0944_8136","siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8154"]}

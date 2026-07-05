@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import concurrent.futures
+import time
+
 from fastapi.testclient import TestClient
 
 import app.api as api
@@ -44,6 +47,9 @@ class _Service:
     def chat(self, *_args, **_kwargs):
         raise RuntimeError("D:/private/internal-secret-path")
 
+    def close(self):
+        pass
+
 
 def _client() -> TestClient:
     return TestClient(api.app, raise_server_exceptions=False)
@@ -60,6 +66,26 @@ def test_liveness_does_not_initialize_service(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_service_singleton_is_initialized_once_under_concurrency(monkeypatch):
+    created = 0
+
+    class SlowService(_Service):
+        def __init__(self):
+            nonlocal created
+            time.sleep(0.02)
+            created += 1
+
+    monkeypatch.setattr(api, "AutoOpsService", SlowService)
+    monkeypatch.setattr(api, "_SERVICE", None)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        services = list(executor.map(lambda _: api.get_service(), range(16)))
+
+    assert created == 1
+    assert len({id(service) for service in services}) == 1
+    api.close_service()
 
 
 def test_readiness_is_full_but_redacts_dependency_errors(monkeypatch):

@@ -4,10 +4,10 @@ import asyncio
 import json
 import logging
 import secrets
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path as PathParam, Query, Request
@@ -42,9 +42,11 @@ from app.http_guard import SlidingWindowRateLimiter
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    yield
-    if get_service.cache_info().currsize:
-        get_service().close()
+    get_service()
+    try:
+        yield
+    finally:
+        close_service()
 
 
 app = FastAPI(
@@ -144,9 +146,26 @@ async def force_utf8_content_type(request, call_next):
     return response
 
 
-@lru_cache(maxsize=1)
+_SERVICE: AutoOpsService | None = None
+_SERVICE_LOCK = threading.Lock()
+
+
 def get_service() -> AutoOpsService:
-    return AutoOpsService()
+    global _SERVICE
+    if _SERVICE is None:
+        with _SERVICE_LOCK:
+            if _SERVICE is None:
+                _SERVICE = AutoOpsService()
+    return _SERVICE
+
+
+def close_service() -> None:
+    global _SERVICE
+    with _SERVICE_LOCK:
+        service = _SERVICE
+        _SERVICE = None
+    if service is not None:
+        service.close()
 
 
 @app.get("/", include_in_schema=False)

@@ -2,7 +2,7 @@
 
 > 本报告是 ranking-only eval，只评估检索排序，不调用外部 LLM，不调用 `/api/chat`，不生成答案，也不代表最终生成质量。
 
-- 运行模式：`api`
+- 运行模式：`local`
 - 检索策略：`hybrid`
 - Split：`development`
 - 可回答题：35

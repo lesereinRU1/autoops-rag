@@ -22,8 +22,10 @@ class AgentState(TypedDict, total=False):
     knowledge_graph: dict[str, Any]
     agent_trace: list[dict[str, Any]]
     verified_solution_used: bool
+    verified_source_chunk_ids: list[str]
     refusal_reason: str
     refusal_kind: str
+    citation_warnings: list[str]
     query_expansion_terms: list[str]
     generation_usage: dict[str, Any]
     retrieval_trace: dict[str, Any]

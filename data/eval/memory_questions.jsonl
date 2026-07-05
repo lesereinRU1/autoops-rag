@@ -1,0 +1,3 @@
+{"id":"m001","first":"RD_MB_DATA_LEN允许读取多少个寄存器？","followup":"那写入最多多少个呢？","expected_tool":"check_parameter_range","expected_contains":["WR_MB_DATA_LEN","121"]}
+{"id":"m002","first":"S7-1200的Modbus TCP默认端口是多少？","followup":"这个端口可以改吗？","expected_tool":"check_parameter_range","expected_contains":["502","现场配置"]}
+{"id":"m003","first":"MB_CLIENT出现16#80C8是什么意思？","followup":"这个故障先检查哪些地方？","expected_tool":"lookup_alarm_code","expected_contains":["16#80C8","建议核对"]}

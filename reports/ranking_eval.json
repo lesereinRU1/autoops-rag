@@ -1,12 +1,12 @@
 {
   "evaluation_type": "ranking_only_eval",
-  "generated_at": "2026-07-01T23:37:12+08:00",
+  "generated_at": "2026-07-05T21:40:18+08:00",
   "dataset": "D:\\autoops-rag\\data\\eval\\formal_questions.jsonl",
-  "dataset_sha256": "d3e2c8817b3c3274ea1b8151d6a73a237f607f000c3825bac44bdabc78b11f58",
+  "dataset_sha256": "e251df9e9e495644108773becc1880db35d4af0429068a42b881e4501bea4063",
   "split": "development",
   "strategy": "hybrid",
-  "run_mode": "api",
-  "retrieval_endpoint": "/api/search",
+  "run_mode": "local",
+  "retrieval_endpoint": "local HybridRetriever",
   "external_llm_called": false,
   "chat_endpoint_called": false,
   "answers_generated": false,
@@ -21,8 +21,8 @@
     "gold_in_top5_not_top1": 4
   },
   "latency_ms": {
-    "p50": 339.01,
-    "p95": 410.62
+    "p50": 328.26,
+    "p95": 449.83
   },
   "gold_missing_top5": [],
   "gold_in_top5_not_top1": [

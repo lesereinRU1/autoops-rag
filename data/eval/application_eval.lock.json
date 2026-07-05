@@ -1,0 +1,6 @@
+{
+  "file": "data/eval/application_questions.jsonl",
+  "sha256": "d42d5901a7bb0efd934766f903829d22ca744c757619f2361ee2d71a55e1c31d",
+  "frozen_at": "2026-06-29T14:40:00+08:00",
+  "scope": "20道自查回归题；不是独立盲测集，修改后必须更新锁文件并说明原因"
+}

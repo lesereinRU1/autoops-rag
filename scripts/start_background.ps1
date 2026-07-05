@@ -30,5 +30,23 @@ if (-not $Listener) {
     Write-Host 'Service failed to listen on port 8000. Check reports\server.err.log.'
     exit 1
 }
+$Ready = $false
+for ($Index = 0; $Index -lt 60; $Index++) {
+    try {
+        $Response = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/health/ready' -TimeoutSec 2
+        if ($Response.status -eq 'ok') {
+            $Ready = $true
+            break
+        }
+    } catch {
+        if ($Process.HasExited) { break }
+    }
+    Start-Sleep -Milliseconds 500
+}
+if (-not $Ready) {
+    if (-not $Process.HasExited) { Stop-Process -Id $Process.Id -Force }
+    Write-Host 'Service opened the port but did not become ready. Check reports\server.err.log.'
+    exit 1
+}
 $Listener.OwningProcess | Set-Content "$Project\storage\server.pid"
 Write-Host "Service started in the background. PID=$($Listener.OwningProcess); URL=http://127.0.0.1:8000"
