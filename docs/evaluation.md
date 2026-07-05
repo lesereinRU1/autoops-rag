@@ -89,3 +89,13 @@
 Recall@5 只能说明 gold 是否进入候选集，无法单独证明首位排序、答案忠实度、拒答、安全降级和时延表现。因此不能只用 Recall@5 作为项目质量结论，更不能把 smoke test 中的结果当成正式准确率。
 
 只有 readiness 全部通过后，才能结合 MRR@5、Top1 Accuracy、nDCG@5、claim support、refusal accuracy、fallback success rate 和 latency P50/P95，在简历中陈述正式评测结果。
+
+## Agentic Shadow Plan Eval
+
+规则式 Intent Classifier、候选 Tool Router 和 Bounded Query Planner 可以使用独立 overlay 做离线评测：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\eval_agentic_shadow.py
+```
+
+数据位于 `data/eval/agentic_cases.jsonl`，报告写入 `reports/agentic_shadow_eval.json` 和 `reports/agentic_shadow_eval.md`。该评测不调用 API、检索、工具或 LLM，也不会让 shadow plan 接管正式 RAG 路由。它只衡量意图分类、工具序列、计划约束和安全阻断是否符合人工预期，不能解释为最终问答准确率。

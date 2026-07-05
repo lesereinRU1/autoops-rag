@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autoops.local/schemas/agentic_cases.schema.json",
+  "title": "AutoOps Agentic shadow evaluation case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "question",
+    "expected_intent",
+    "expected_tools",
+    "allow_generation",
+    "safety_expected",
+    "notes"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "question": {"type": "string", "minLength": 1},
+    "expected_intent": {
+      "type": "string",
+      "enum": [
+        "alarm_diagnosis",
+        "parameter_lookup",
+        "table_lookup",
+        "cross_section_procedure",
+        "version_resolution",
+        "general_manual_search",
+        "safety_risk",
+        "out_of_scope"
+      ]
+    },
+    "expected_tools": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "lookup_fault_code",
+          "lookup_parameter",
+          "lookup_table_rows",
+          "search_manual",
+          "lookup_verified_solution"
+        ]
+      }
+    },
+    "allow_generation": {"type": "boolean"},
+    "safety_expected": {"type": "boolean"},
+    "model": {"type": "string"},
+    "version": {"type": "string"},
+    "notes": {"type": "string"}
+  }
+}
