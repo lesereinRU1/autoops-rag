@@ -1,0 +1,25 @@
+{"id":"q001","question":"MB_CLIENT 出现 16#80C8 是什么意思？","model":"S7-1200","expected_terms":["80c8","timeout","超时"]}
+{"id":"q002","question":"Modbus TCP 连接超时先检查什么？","model":"S7-1200","expected_terms":["port","ip","connection","端口"]}
+{"id":"q003","question":"MB_CLIENT 和 MB_SERVER 分别是什么角色？","model":"S7-1200","expected_terms":["mb_client","mb_server","client","server"]}
+{"id":"q004","question":"16#809A 与 CONNECT 参数有什么关系？","model":"S7-1200","expected_terms":["809a","connect","interfaceid"]}
+{"id":"q005","question":"Modbus TCP 默认使用哪个端口？","model":"S7-1200","expected_terms":["502","port"]}
+{"id":"q006","question":"40001 和协议报文地址为什么可能差一？","model":"S7-1200","expected_terms":["40001","zero","offset","零基"]}
+{"id":"q007","question":"读取保持寄存器通常使用什么功能码？","model":"S7-1200","expected_terms":["function code 03","功能码为 03","holding register"]}
+{"id":"q008","question":"读取输入寄存器通常使用什么功能码？","model":"S7-1200","expected_terms":["function code 04","功能码为 04","input register"]}
+{"id":"q009","question":"写多个保持寄存器用哪个功能码？","model":"S7-1200","expected_terms":["0x10","function code 16","功能码为 16"]}
+{"id":"q010","question":"32 位浮点数为什么占两个 Modbus 寄存器？","model":"S7-1200","expected_terms":["32","two","两个 16 位"]}
+{"id":"q011","question":"多寄存器浮点数应如何核对字节序？","model":"S7-1200","expected_terms":["abcd","byte order","字节序"]}
+{"id":"q012","question":"BUSY 为真时能否不断触发新请求？","model":"S7-1200","expected_terms":["busy","request","请求"]}
+{"id":"q013","question":"通信故障排查需要先记录哪些在线状态？","model":"S7-1200","expected_terms":["req","done","busy","status"]}
+{"id":"q014","question":"回答为什么必须保留页码和 chunk_id？","model":"S7-1200","expected_terms":["chunk_id","页码","citation"]}
+{"id":"q015","question":"什么时候不能直接执行助手给出的 PLC 操作？","model":"S7-1200","expected_terms":["强制输出","安全","lockout"]}
+{"id":"q016","question":"设备固件版本缺失时应该怎么办？","model":"S7-1200","expected_terms":["固件版本","firmware","补充"]}
+{"id":"q017","question":"Modbus 异常码 01 代表什么？","model":"S7-1200","expected_terms":["illegal function","不支持"]}
+{"id":"q018","question":"Modbus 异常码 02 代表什么？","model":"S7-1200","expected_terms":["illegal data address","地址"]}
+{"id":"q019","question":"Modbus 异常码 03 代表什么？","model":"S7-1200","expected_terms":["illegal data value","value"]}
+{"id":"q020","question":"如何区分物理链路问题与应用层参数问题？","model":"S7-1200","expected_terms":["physical","link","ip","分层"]}
+{"id":"q021","question":"为什么不能复制其他 CPU 的连接结构直接使用？","model":"S7-1200","expected_terms":["connect","cpu","firmware"]}
+{"id":"q022","question":"读取长度和接收缓冲区不匹配会怎样？","model":"S7-1200","expected_terms":["length","buffer","长度"]}
+{"id":"q023","question":"网络故障排查时要检查重复 IP 吗？","model":"S7-1200","expected_terms":["duplicate","ip","重复地址"]}
+{"id":"q024","question":"为什么只允许已确认方案写入长期记忆？","model":"S7-1200","expected_terms":["确认","verified","长期记忆"]}
+
