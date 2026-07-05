@@ -6,6 +6,8 @@ import time
 from langgraph.graph import END, START, StateGraph
 
 from app.agent.state import AgentState
+from app.agent.intent import classify_intent
+from app.agent.tool_router import candidate_tools
 from app.agent.tools import format_alarm, format_parameter, format_verified_solution
 from app.generation.citation_guard import validate_citations
 from app.retrieval.query_expansion import expand_query
@@ -49,6 +51,12 @@ def build_graph(service):
         )
         refusal_reason = refusal["reason"] if refusal else ""
         refusal_kind = refusal["kind"] if refusal else ""
+        intent_result = classify_intent(
+            policy_question,
+            model=state.get("model", "S7-1200"),
+            version=state.get("version", ""),
+        )
+        candidate_plan = candidate_tools(intent_result["intent"])
         alarm = extract_alarm(question)
         parameter_words = (
             "范围", "上下限", "参数", "端口", "波特率", "unit id", "寄存器地址",
@@ -75,6 +83,21 @@ def build_graph(service):
             },
             {"node": "route", "tool": tool, "reason": reason},
             {
+                "node": "intent_classifier_shadow",
+                "shadow": True,
+                **intent_result,
+            },
+            {
+                "node": "tool_router_shadow",
+                "shadow": True,
+                "configured_enabled": bool(
+                    getattr(service.settings, "enable_agentic_routing", False)
+                ),
+                "applied": False,
+                "intent": intent_result["intent"],
+                "candidate_plan": candidate_plan,
+            },
+            {
                 "node": "knowledge_graph",
                 "matched_entities": [item["label"] for item in kg["matched_entities"]],
                 "expanded_terms": kg["expansion_terms"],
@@ -91,6 +114,8 @@ def build_graph(service):
         )
         return {
             "selected_tool": tool,
+            "intent": intent_result,
+            "candidate_plan": candidate_plan,
             "route_reason": reason,
             "knowledge_graph": kg,
             "rewritten_query": question,

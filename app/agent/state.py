@@ -31,6 +31,7 @@ class AgentState(TypedDict, total=False):
     retrieval_trace: dict[str, Any]
     intent: dict[str, Any]
     plan: list[dict[str, Any]]
+    candidate_plan: list[str]
     tool_calls: list[dict[str, Any]]
     round_count: int
     budget: dict[str, Any]
@@ -44,6 +45,7 @@ def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
     return {
         "intent": {},
         "plan": [],
+        "candidate_plan": [],
         "tool_calls": [],
         "round_count": 0,
         "budget": {},

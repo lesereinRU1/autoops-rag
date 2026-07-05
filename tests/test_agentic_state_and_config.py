@@ -10,6 +10,7 @@ def test_agentic_state_defaults_are_fresh_and_disabled():
     assert first == {
         "intent": {},
         "plan": [],
+        "candidate_plan": [],
         "tool_calls": [],
         "round_count": 0,
         "budget": {},
@@ -64,6 +65,7 @@ def test_legacy_trace_deserializes_with_agentic_defaults():
 
     assert trace.intent == {}
     assert trace.plan == []
+    assert trace.candidate_plan == []
     assert trace.tool_calls == []
     assert trace.rounds == 0
     assert trace.budget == {}

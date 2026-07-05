@@ -297,6 +297,7 @@ class AutoOpsService:
             "warnings": warnings,
             "intent": state.get("intent", {}),
             "plan": state.get("plan", []),
+            "candidate_plan": state.get("candidate_plan", []),
             "tool_calls": state.get("tool_calls", []),
             "rounds": state.get("round_count", 0),
             "budget": state.get("budget", {}),
