@@ -1,0 +1,1226 @@
+{
+  "evaluation_type": "evidence_driven_iterative_retrieval_ab",
+  "generated_at": "2026-07-05T22:54:12+08:00",
+  "dataset": "D:\\autoops-rag\\data\\eval\\formal_questions.jsonl",
+  "dataset_sha256": "e251df9e9e495644108773becc1880db35d4af0429068a42b881e4501bea4063",
+  "split": "development",
+  "external_llm_called": false,
+  "api_called": false,
+  "answers_generated": false,
+  "metrics": {
+    "total_cases": 35,
+    "retry_trigger_rate": 0.0571,
+    "unnecessary_retry_rate": 1.0,
+    "iterative_retrieval_gain": 0.0,
+    "strict_recall@5_baseline": 0.9714,
+    "strict_recall@5_iterative": 0.9714,
+    "mrr@5_baseline": 0.9057,
+    "mrr@5_iterative": 0.9343,
+    "ndcg@5_baseline": 0.9132,
+    "ndcg@5_iterative": 0.9302,
+    "top1_accuracy_baseline": 0.8286,
+    "top1_accuracy_iterative": 0.8857,
+    "avg_rounds": 1.0571,
+    "p50_latency_ms_baseline": 336.03,
+    "p95_latency_ms_baseline": 696.16,
+    "p50_latency_ms_iterative": 336.03,
+    "p95_latency_ms_iterative": 630.64,
+    "budget_stop_count": 1,
+    "loop_violation_count": 0,
+    "safety_regression_count": 0,
+    "out_of_scope_regression_count": 0
+  },
+  "metric_notes": {
+    "iterative_retrieval_gain": "Iterative minus baseline Strict Recall@5.",
+    "unnecessary_retry_rate": "Retries whose first-round Top5 already contained all human gold chunks / all retries.",
+    "scope": "Retrieval evidence only; this is not final answer accuracy."
+  },
+  "details": [
+    {
+      "id": "formal_001",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": false,
+        "reason": "missing_identifier",
+        "score": 0.18295082,
+        "evidence_count": 5,
+        "missing_terms": [
+          "0"
+        ],
+        "identifiers_supported": false,
+        "recommended_next_action": "rewrite_and_retry"
+      },
+      "retry_triggered": true,
+      "unnecessary_retry": true,
+      "rounds": 2,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_002",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.19627073,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_003",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.22821398,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_004",
+      "intent": "cross_section_procedure",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.20205955,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_005",
+      "intent": "parameter_lookup",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.24218159,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_008",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.24400345,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "iterative_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_009",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.1340176,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_011",
+      "intent": "parameter_lookup",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.17892317,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_024",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.14015704,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8153",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1058_8882",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8153",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1058_8882",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_026",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.15795082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9619",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9647"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9619",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1168_9647"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_027",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.16580796,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_028",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.13986175,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_025",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.12397541,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_012",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.16295082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_013",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.20295082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_031",
+      "intent": "version_resolution",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.26045082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_032",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.16642908,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_033",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.28747161,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0004",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_中文操作与安全边界_a52df96344_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0004",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_034",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.23545082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_035",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.16505608,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_036",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.22295082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_037",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.25979292,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_038",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.19251604,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0936_8091",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8161"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_1053_8840",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0936_8091",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0945_8161"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_039",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.25510286,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_040",
+      "intent": "alarm_diagnosis",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.22295082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0607_6907"
+      ],
+      "iterative_top5": [
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "siemens_s7_1200_system_manual_v4_6_5513d52763_0607_6907"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_041",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.15152225,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_042",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.16695082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_043",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.13545082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_044",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": false,
+        "reason": "missing_identifier",
+        "score": 0.13204173,
+        "evidence_count": 5,
+        "missing_terms": [
+          "plc"
+        ],
+        "identifiers_supported": false,
+        "recommended_next_action": "rewrite_and_retry"
+      },
+      "retry_triggered": true,
+      "unnecessary_retry": true,
+      "rounds": 2,
+      "stop_reason": "max_rounds_reached",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0001",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_045",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.17295082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0001"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_046",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.19663503,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_中文操作与安全边界_a52df96344_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_047",
+      "intent": "parameter_lookup",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.20555952,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_048",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.13545082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0002",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_049",
+      "intent": "parameter_lookup",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.15795082,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_故障排查流程_3b38e4eccb_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_故障排查流程_3b38e4eccb_0001_0005"
+      ],
+      "strict_recall_gain": 0.0
+    },
+    {
+      "id": "formal_050",
+      "intent": "general_manual_search",
+      "assessment": {
+        "round": 1,
+        "sufficient": true,
+        "reason": "sufficient",
+        "score": 0.22821398,
+        "evidence_count": 5,
+        "missing_terms": [],
+        "identifiers_supported": true,
+        "recommended_next_action": "generate"
+      },
+      "retry_triggered": false,
+      "unnecessary_retry": false,
+      "rounds": 1,
+      "stop_reason": "evidence_sufficient",
+      "baseline_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "iterative_top5": [
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0003",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0004",
+        "autoops_故障排查流程_3b38e4eccb_0001_0004",
+        "autoops_modbus地址与数据检查_fbbb96bbd5_0001_0002",
+        "autoops_中文操作与安全边界_a52df96344_0001_0003"
+      ],
+      "strict_recall_gain": 0.0
+    }
+  ],
+  "policy_details": [
+    {
+      "id": "formal_006",
+      "expected_intent": "out_of_scope",
+      "retry_triggered": false
+    },
+    {
+      "id": "formal_007",
+      "expected_intent": "safety_risk",
+      "retry_triggered": false
+    },
+    {
+      "id": "formal_010",
+      "expected_intent": "out_of_scope",
+      "retry_triggered": false
+    },
+    {
+      "id": "formal_029",
+      "expected_intent": "out_of_scope",
+      "retry_triggered": false
+    },
+    {
+      "id": "formal_030",
+      "expected_intent": "safety_risk",
+      "retry_triggered": false
+    }
+  ]
+}

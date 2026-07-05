@@ -7,6 +7,14 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agent.state import AgentState
 from app.agent.intent import classify_intent
+from app.agent.iterative import (
+    assess_evidence,
+    budget_snapshot,
+    build_retry_query,
+    merge_evidence_rounds,
+    retry_stop_reason,
+    should_retry_retrieval,
+)
 from app.agent.planner import BoundedQueryPlanner
 from app.agent.tool_router import candidate_tools
 from app.agent.tools import format_alarm, format_parameter, format_verified_solution
@@ -45,8 +53,12 @@ def build_graph(service):
         max_agent_rounds=getattr(service.settings, "max_agent_rounds", 2),
         max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
     )
+    iterative_enabled = bool(
+        getattr(service.settings, "enable_iterative_retrieval", False)
+    )
 
     def analyze_request(state: AgentState) -> AgentState:
+        agent_started_at = time.monotonic()
         question = state["question"]
         policy_question = state.get("original_question", question)
         refusal = service.scope_refusal(
@@ -131,6 +143,21 @@ def build_graph(service):
                 "reason": refusal_reason,
             }
         )
+        if refusal_kind == "unsafe_request":
+            initial_stop_reason = "safety_blocked"
+        elif refusal_kind == "unanswerable_scope":
+            initial_stop_reason = "out_of_scope"
+        elif refusal_reason:
+            initial_stop_reason = "insufficient_evidence"
+        else:
+            initial_stop_reason = ""
+        initial_tracking = {
+            **state,
+            "agent_started_at": agent_started_at,
+            "round_count": 0,
+            "retry_count": 0,
+            "tool_calls": [],
+        }
         return {
             "selected_tool": tool,
             "intent": intent_result,
@@ -144,6 +171,14 @@ def build_graph(service):
             "verified_solution_used": False,
             "refusal_reason": refusal_reason,
             "refusal_kind": refusal_kind,
+            "round_count": 0,
+            "tool_calls": [],
+            "rewritten_queries": [],
+            "retrieval_rounds_trace": [],
+            "evidence_assessments": [],
+            "agent_started_at": agent_started_at,
+            "stop_reason": initial_stop_reason,
+            "budget": budget_snapshot(initial_tracking, service.settings),
         }
 
     def after_policy_gate(state: AgentState) -> str:
@@ -177,6 +212,8 @@ def build_graph(service):
                 "fallback_reason": "policy_refusal",
             },
             "retrieval_trace": {},
+            "stop_reason": state.get("stop_reason") or "insufficient_evidence",
+            "budget": budget_snapshot(state, service.settings),
         }
 
     def execute_tool(state: AgentState) -> AgentState:
@@ -184,9 +221,19 @@ def build_graph(service):
         model = state.get("model", "S7-1200")
         tool = state["selected_tool"]
         trace = list(state.get("agent_trace", []))
+        tool_calls = list(state.get("tool_calls", []))
         result_parts: list[str] = []
 
+        verified_started = time.perf_counter()
         verified = service.memory.find_verified_solution(original_question, model)
+        tool_calls.append(
+            {
+                "tool": "lookup_verified_solution",
+                "round": state.get("round_count", 0),
+                "success": verified is not None,
+                "latency_ms": round((time.perf_counter() - verified_started) * 1000, 2),
+            }
+        )
         verified_used = verified is not None
         if verified:
             result_parts.append(format_verified_solution(verified))
@@ -205,13 +252,31 @@ def build_graph(service):
             trace.append({"node": "verified_memory", "decision": "no_verified_match"})
 
         if tool == "lookup_alarm_code":
+            structured_started = time.perf_counter()
             record = service.memory.lookup_alarm(extract_alarm(original_question) or original_question, model)
             result_parts.append(format_alarm(record))
+            tool_calls.append(
+                {
+                    "tool": "lookup_fault_code",
+                    "round": state.get("round_count", 0),
+                    "success": record is not None,
+                    "latency_ms": round((time.perf_counter() - structured_started) * 1000, 2),
+                }
+            )
         elif tool == "check_parameter_range":
+            structured_started = time.perf_counter()
             value_match = VALUE_PATTERN.search(original_question.replace("S7-1200", ""))
             value = float(value_match.group(1)) if value_match else None
             record = service.find_parameter(original_question, model)
             result_parts.append(format_parameter(record, value))
+            tool_calls.append(
+                {
+                    "tool": "lookup_parameter",
+                    "round": state.get("round_count", 0),
+                    "success": record is not None,
+                    "latency_ms": round((time.perf_counter() - structured_started) * 1000, 2),
+                }
+            )
 
         trace.append(
             {
@@ -221,6 +286,7 @@ def build_graph(service):
                 "verified_solution_used": verified_used,
             }
         )
+        next_state = {**state, "tool_calls": tool_calls}
         return {
             "tool_result": "\n\n".join(part for part in result_parts if part),
             "agent_trace": trace,
@@ -228,6 +294,8 @@ def build_graph(service):
             "verified_source_chunk_ids": (
                 list(verified.get("source_chunk_ids", [])) if verified else []
             ),
+            "tool_calls": tool_calls,
+            "budget": budget_snapshot(next_state, service.settings),
         }
 
     def retrieve(state: AgentState) -> AgentState:
@@ -245,7 +313,7 @@ def build_graph(service):
         search_query = " ".join([query, *kg_terms]).strip()
         expansion_terms = expand_query(search_query)[1] if service.settings.enable_query_expansion else []
         retrieval_started = time.perf_counter()
-        evidence, retrieval_trace = service.retriever.search_with_trace(
+        new_evidence, retrieval_trace = service.retriever.search_with_trace(
             search_query, top_k=5, model=model, version=version
         )
         round_retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
@@ -256,16 +324,80 @@ def build_graph(service):
         if verified_source_chunk_ids:
             verified_evidence = service.chunks_by_ids(verified_source_chunk_ids)
             seen: set[str] = set()
-            evidence = [
+            new_evidence = [
                 hit
-                for hit in [*verified_evidence, *evidence]
+                for hit in [*verified_evidence, *new_evidence]
                 if not (hit.chunk.chunk_id in seen or seen.add(hit.chunk.chunk_id))
             ][:5]
-            retrieval_trace["final_evidence"] = service.retriever._trace_hits(evidence)
+        previous_evidence = list(state.get("evidence", []))
+        evidence = (
+            merge_evidence_rounds(previous_evidence, new_evidence)
+            if iterative_enabled and previous_evidence
+            else new_evidence
+        )
+        retrieval_trace["final_evidence"] = service.retriever._trace_hits(evidence)
         distinct_docs = len({hit.chunk.doc_id for hit in evidence})
         top_score = float(evidence[0].rerank_score or evidence[0].score) if evidence else 0.0
-        identifiers_supported = service.evidence_supports_query(query, evidence)
-        sufficient = bool(evidence) and top_score > 0.01 and identifiers_supported
+        next_round = int(state.get("round_count", 0)) + 1
+        intent = state.get("intent", {})
+        intent_name = intent.get("intent", "") if isinstance(intent, dict) else str(intent)
+        assessment = assess_evidence(
+            query,
+            evidence,
+            round_count=next_round,
+            intent=intent_name,
+            identifiers_supported=service.evidence_supports_query(query, evidence),
+        )
+        identifiers_supported = bool(assessment["identifiers_supported"])
+        sufficient = bool(assessment["sufficient"])
+        tool_calls = list(state.get("tool_calls", []))
+        tool_calls.append(
+            {
+                "tool": "search_manual",
+                "round": next_round,
+                "success": bool(new_evidence),
+                "latency_ms": round(round_retrieval_ms, 2),
+                "query": search_query,
+            }
+        )
+        decision_state = {
+            **state,
+            "evidence": evidence,
+            "round_count": next_round,
+            "tool_calls": tool_calls,
+        }
+        retry_allowed = should_retry_retrieval(
+            decision_state, assessment, service.settings
+        )
+        if sufficient:
+            stop_reason = "evidence_sufficient"
+        elif iterative_enabled and retry_allowed:
+            stop_reason = ""
+        elif iterative_enabled:
+            stop_reason = retry_stop_reason(decision_state, service.settings)
+        elif state.get("retry_count", 0) >= 1:
+            stop_reason = "insufficient_evidence"
+        else:
+            stop_reason = ""
+        assessment = {
+            **assessment,
+            "retry_allowed": retry_allowed,
+            "stop_reason": stop_reason,
+        }
+        assessments = [*state.get("evidence_assessments", []), assessment]
+        round_trace = {
+            "round": next_round,
+            "query": state["question"],
+            "rewritten_query": query if query != state["question"] else "",
+            "evidence_count": len(evidence),
+            "evidence_score": round(top_score, 8),
+            "evidence_passed": sufficient,
+            "stop_reason": stop_reason,
+        }
+        retrieval_rounds_trace = [
+            *state.get("retrieval_rounds_trace", []),
+            round_trace,
+        ]
         trace.append(
             {
                 "node": "hybrid_retrieval",
@@ -283,31 +415,76 @@ def build_graph(service):
                 "sufficient": sufficient,
                 "identifiers_supported": identifiers_supported,
                 "retry_count": state.get("retry_count", 0),
+                "reason": assessment["reason"],
+                "recommended_next_action": assessment["recommended_next_action"],
             }
         )
+        next_state = {
+            **decision_state,
+            "evidence_assessments": assessments,
+            "retrieval_rounds_trace": retrieval_rounds_trace,
+        }
         return {
             "evidence": evidence,
             "evidence_sufficient": sufficient,
             "agent_trace": trace,
             "retrieval_trace": retrieval_trace,
+            "round_count": next_round,
+            "tool_calls": tool_calls,
+            "evidence_assessments": assessments,
+            "retrieval_rounds_trace": retrieval_rounds_trace,
+            "stop_reason": stop_reason,
+            "budget": budget_snapshot(next_state, service.settings),
         }
 
     def after_evidence_gate(state: AgentState) -> str:
+        if iterative_enabled:
+            if state.get("evidence_sufficient"):
+                return "generate_answer"
+            assessments = state.get("evidence_assessments", [])
+            assessment = assessments[-1] if assessments else {}
+            return (
+                "rewrite"
+                if should_retry_retrieval(state, assessment, service.settings)
+                else "generate_answer"
+            )
         if state.get("evidence_sufficient") or state.get("retry_count", 0) >= 1:
             return "generate_answer"
         return "rewrite"
 
     def rewrite(state: AgentState) -> AgentState:
-        query = re.sub(r"(请问|麻烦|一下|应该如何|怎么办)", " ", state["question"])
-        context = " ".join(
-            filter(None, [state.get("model", ""), state.get("version", ""), "故障诊断 参数 手册"])
-        )
+        if iterative_enabled:
+            assessments = state.get("evidence_assessments", [])
+            assessment = assessments[-1] if assessments else {}
+            rewritten_query = build_retry_query(state["question"], state, assessment)
+        else:
+            query = re.sub(r"(请问|麻烦|一下|应该如何|怎么办)", " ", state["question"])
+            context = " ".join(
+                filter(None, [state.get("model", ""), state.get("version", ""), "故障诊断 参数 手册"])
+            )
+            rewritten_query = f"{query.strip()} {context}"
         trace = list(state.get("agent_trace", []))
-        trace.append({"node": "query_rewrite", "attempt": state.get("retry_count", 0) + 1})
+        retry_count = state.get("retry_count", 0) + 1
+        trace.append(
+            {
+                "node": "query_rewrite",
+                "attempt": retry_count,
+                "mode": "iterative" if iterative_enabled else "legacy",
+                "query": rewritten_query,
+            }
+        )
+        rewritten_queries = [*state.get("rewritten_queries", []), rewritten_query]
+        next_state = {
+            **state,
+            "retry_count": retry_count,
+            "rewritten_queries": rewritten_queries,
+        }
         return {
-            "rewritten_query": f"{query.strip()} {context}",
-            "retry_count": state.get("retry_count", 0) + 1,
+            "rewritten_query": rewritten_query,
+            "retry_count": retry_count,
             "agent_trace": trace,
+            "rewritten_queries": rewritten_queries,
+            "budget": budget_snapshot(next_state, service.settings),
         }
 
     def generate_answer(state: AgentState) -> AgentState:
@@ -328,6 +505,15 @@ def build_graph(service):
                 "final_model": outcome.final_model,
             }
         )
+        stop_reason = state.get("stop_reason") or (
+            "evidence_sufficient"
+            if state.get("evidence_sufficient", False)
+            else "insufficient_evidence"
+        )
+        next_state = {
+            **state,
+            "stop_reason": stop_reason,
+        }
         return {
             "answer": outcome.answer,
             "agent_trace": trace,
@@ -346,6 +532,12 @@ def build_graph(service):
                 "total_latency_ms": outcome.total_latency_ms,
                 "fallback_reason": outcome.fallback_reason,
             },
+            "stop_reason": stop_reason,
+            "budget": budget_snapshot(
+                next_state,
+                service.settings,
+                llm_calls_used=outcome.external_calls,
+            ),
         }
 
     def citation_guard(state: AgentState) -> AgentState:

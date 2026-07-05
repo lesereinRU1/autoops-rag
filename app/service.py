@@ -303,6 +303,9 @@ class AutoOpsService:
             "budget": state.get("budget", {}),
             "stop_reason": state.get("stop_reason", ""),
             "evidence_assessments": state.get("evidence_assessments", []),
+            "rewrite_triggered": bool(state.get("rewritten_queries", [])),
+            "rewritten_queries": state.get("rewritten_queries", []),
+            "retrieval_rounds": state.get("retrieval_rounds_trace", []),
         }
         rag_trace = self.traces.append(rag_trace)
         return ChatResponse(

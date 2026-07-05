@@ -17,6 +17,8 @@ def test_agentic_state_defaults_are_fresh_and_disabled():
         "stop_reason": "",
         "evidence_assessments": [],
         "agentic_enabled": False,
+        "rewritten_queries": [],
+        "retrieval_rounds_trace": [],
     }
     first["plan"]["steps"] = [{"tool": "test-only"}]
     assert second["plan"] == {}
@@ -71,6 +73,9 @@ def test_legacy_trace_deserializes_with_agentic_defaults():
     assert trace.budget == {}
     assert trace.stop_reason == ""
     assert trace.evidence_assessments == []
+    assert trace.rewrite_triggered is False
+    assert trace.rewritten_queries == []
+    assert trace.retrieval_rounds == []
 
     legacy_trace["plan"] = []
     assert RagTraceResponse.model_validate(legacy_trace).plan == []

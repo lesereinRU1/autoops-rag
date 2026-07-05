@@ -122,6 +122,9 @@ class RagTraceResponse(BaseModel):
     budget: dict[str, Any] = Field(default_factory=dict)
     stop_reason: str = ""
     evidence_assessments: list[dict[str, Any]] = Field(default_factory=list)
+    rewrite_triggered: bool = False
+    rewritten_queries: list[str] = Field(default_factory=list)
+    retrieval_rounds: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):

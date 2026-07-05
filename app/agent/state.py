@@ -38,6 +38,9 @@ class AgentState(TypedDict, total=False):
     stop_reason: str
     evidence_assessments: list[dict[str, Any]]
     agentic_enabled: bool
+    rewritten_queries: list[str]
+    retrieval_rounds_trace: list[dict[str, Any]]
+    agent_started_at: float
 
 
 def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
@@ -52,4 +55,6 @@ def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
         "stop_reason": "",
         "evidence_assessments": [],
         "agentic_enabled": enabled,
+        "rewritten_queries": [],
+        "retrieval_rounds_trace": [],
     }
