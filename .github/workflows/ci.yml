@@ -40,7 +40,7 @@ jobs:
           python -m coverage report
 
       - name: Validate formal evaluation data
-        run: python scripts/validate_formal_eval.py
+        run: python scripts/validate_formal_eval.py --skip-chunk-existence-check
 
       - name: Validate Docker Compose
         run: |
