@@ -6,14 +6,14 @@
 
 | 项目 | 当前结果 | 含义 |
 |---|---:|---|
-| Pytest | 115 passed | 单元、回归、安全、Agentic shadow、统一 Tool Registry、工具预算和迭代检索测试通过 |
+| Pytest | 默认环境 156 passed、1 skipped；PostgreSQL 专用测试环境 157 passed | 单元、回归、安全、Agentic shadow、工具注册中心（Tool Registry）、MCP、SSE、Repository、PostgreSQL integration 和运行指标测试通过 |
 | Formal questions | 60 | 50 道可回答题、10 道不可回答题，其中 4 道安全题 |
 | Validation errors | 0 | schema、gold 来源和基本数据规则未发现错误 |
 | Resume accuracy readiness | false | 官方资料占比和独立复核数量尚未达到宣传门槛 |
 
 Readiness 未通过不是脚本失败：当前官方来源可回答题占比为 6%，`reviewed` 题为 20，低于策略要求的 70% 和 30 题。
 
-## Ranking-only eval
+## 仅检索排序评测（Ranking-only eval）
 
 数据：`formal_questions.jsonl` development split 中 35 道可回答题。脚本不调用 `/api/chat`、生成模型或 LLM judge。
 
@@ -34,9 +34,9 @@ Readiness 未通过不是脚本失败：当前官方来源可回答题占比为 
 
 这些指标只评价检索和排序，不评价生成答案是否完整、是否忠实，也不能证明现场可用率。
 
-## Agentic shadow eval
+## Agentic 影子评测（shadow eval）
 
-数据：24 个 agentic overlay case，每类 intent 至少 3 条。评测不调用 API、检索、工具或 LLM，不执行 structured plan。
+数据：24 个 agentic overlay case，每类 intent 至少 3 条。评测不调用 API、检索、工具或 LLM，不执行结构化计划（structured plan）。它评价的是 shadow 候选决策，不是已接管主流程的自主 Agent。
 
 | 指标 | 结果 |
 |---|---:|
@@ -51,7 +51,7 @@ Readiness 未通过不是脚本失败：当前官方来源可回答题占比为 
 
 这些 100% 表示规则分类、候选工具和 bounded plan 与小规模人工 overlay 预期一致。它不包含真实检索、工具执行和答案生成，绝不能写成“问答准确率 100%”。
 
-## Iterative retrieval eval
+## 迭代检索评测（Iterative Retrieval eval）
 
 数据：与 ranking-only 相同的 development answerable 集，并对不可回答/安全题执行策略回归检查。
 
@@ -70,7 +70,7 @@ Readiness 未通过不是脚本失败：当前官方来源可回答题占比为 
 | Safety Regression Count | 0 |
 | Out-of-scope Regression Count | 0 |
 
-两次旧触发分别由通用标识符 `0` 和 `PLC` 导致，阶段 7 过滤后均被阻断。这里的 candidate 收益包含“避免不必要 Rewrite 破坏原排序”，不表示二次检索本身一定提升召回。
+两次旧触发分别由通用标识符 `0` 和 `PLC` 导致，阶段 7 过滤后均被阻断。这里的 candidate 收益包含“避免不必要的问题改写（Query Rewrite）破坏原排序”，不表示二次检索本身一定提升召回。
 
 当前过滤后没有 retry-positive case 真正执行第二轮，因此该实验能证明误触发下降，却不足以证明真实证据缺失时的二次检索收益。
 

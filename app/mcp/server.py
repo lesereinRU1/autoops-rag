@@ -107,6 +107,7 @@ class MCPToolAdapter:
                 name,
                 arguments or {},
                 allow_aliases=False,
+                source="mcp",
             )
         )
         return tool_result_to_mcp(result)

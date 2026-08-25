@@ -14,8 +14,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path as PathParam, Query, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.models import (
@@ -31,6 +30,7 @@ from app.models import (
     IngestResponse,
     LivenessResponse,
     RagTraceResponse,
+    RuntimeMetricsResponse,
     SearchRequest,
     SearchResponse,
     SavedFeedbackResponse,
@@ -41,6 +41,7 @@ from app.models import (
 from app.service import AutoOpsService
 from app.config import get_settings
 from app.http_guard import SlidingWindowRateLimiter
+from app.metrics import RuntimeMetricsMiddleware, get_runtime_metrics
 from app.tracing import sanitize_trace
 
 
@@ -77,6 +78,7 @@ app.mount(
     name="react-demo-assets",
 )
 SETTINGS = get_settings()
+RUNTIME_METRICS = get_runtime_metrics(SETTINGS.metrics_latency_window_size)
 QUERY_GATE = asyncio.Semaphore(max(1, SETTINGS.max_concurrent_queries))
 RATE_LIMITER = SlidingWindowRateLimiter(
     SETTINGS.rate_limit_per_minute,
@@ -161,6 +163,26 @@ async def force_utf8_content_type(request, call_next):
     return response
 
 
+app.add_middleware(
+    RuntimeMetricsMiddleware,
+    collector=RUNTIME_METRICS,
+    excluded_paths=(
+        "/",
+        "/docs",
+        "/swagger",
+        "/openapi.json",
+        "/api/index/status",
+    ),
+    excluded_prefixes=(
+        "/static",
+        "/demo",
+        "/health",
+        "/metrics",
+        "/api/metrics",
+    ),
+)
+
+
 _SERVICE: AutoOpsService | None = None
 _SERVICE_LOCK = threading.Lock()
 
@@ -226,7 +248,12 @@ def swagger_docs():
 
 def readiness_payload(request: Request) -> dict:
     try:
-        return {"status": "ok", **get_service().status()}
+        return {
+            "status": "ok",
+            **get_service().status(),
+            "metrics_collector_initialized": True,
+            "active_requests": RUNTIME_METRICS.active_requests,
+        }
     except Exception as exc:
         request_id = getattr(request.state, "request_id", "unknown")
         LOGGER.exception(
@@ -350,7 +377,11 @@ def _workflow_event(
     )
 
 
-async def _chat_event_stream(request: ChatRequest, request_id: str):
+async def _chat_event_stream(
+    request: ChatRequest,
+    request_id: str,
+    http_request: Request,
+):
     queue: asyncio.Queue[tuple[str, str, dict]] = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
@@ -408,9 +439,11 @@ async def _chat_event_stream(request: ChatRequest, request_id: str):
             )
         )
     except asyncio.CancelledError:
+        http_request.state.metrics_error_category = "client_disconnect"
         task.cancel()
         raise
     except TimeoutError:
+        http_request.state.metrics_error_category = "timeout"
         LOGGER.warning("chat_stream timed out request_id=%s", request_id)
         yield _sse_payload(
             _workflow_event(
@@ -421,6 +454,7 @@ async def _chat_event_stream(request: ChatRequest, request_id: str):
             )
         )
     except Exception as exc:
+        http_request.state.metrics_error_category = "internal_error"
         LOGGER.exception(
             "chat_stream failed request_id=%s error_type=%s",
             request_id,
@@ -444,7 +478,7 @@ async def _chat_event_stream(request: ChatRequest, request_id: str):
 )
 async def chat_stream(request: ChatRequest, http_request: Request):
     return StreamingResponse(
-        _chat_event_stream(request, http_request.state.request_id),
+        _chat_event_stream(request, http_request.state.request_id, http_request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -551,6 +585,25 @@ def clear_session(
 )
 def business_metrics():
     return get_service().memory.business_metrics()
+
+
+@app.get(
+    "/api/metrics/runtime",
+    response_model=RuntimeMetricsResponse,
+    response_description="进程内运行指标",
+    tags=["服务状态"],
+    summary="查看进程内运行指标聚合",
+)
+def runtime_metrics():
+    return RUNTIME_METRICS.snapshot()
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    return Response(
+        content=RUNTIME_METRICS.prometheus_exposition(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @app.get(

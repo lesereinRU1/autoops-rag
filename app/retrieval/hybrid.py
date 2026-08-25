@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from app.config import Settings
 from app.models import SearchHit
 from app.retrieval.bm25_retriever import BM25Retriever
@@ -46,20 +48,41 @@ class HybridRetriever:
         # Candidate recall uses the original question. Expanded terms are applied only
         # during reranking so a dictionary addition cannot push an existing candidate
         # out of the Dense/BM25 Top30 pools.
+        dense_started = time.perf_counter()
         dense = self.vector.search(query, top_k=30, model=model, version=version)
+        dense_latency_ms = (time.perf_counter() - dense_started) * 1000
+        bm25_started = time.perf_counter()
         sparse = (
             self.bm25.search(query, top_k=30, model=model, version=version)
             if self.bm25 is not None
             else []
         )
+        bm25_latency_ms = (
+            (time.perf_counter() - bm25_started) * 1000
+            if self.bm25 is not None
+            else None
+        )
+        fusion_started = time.perf_counter()
         fused = reciprocal_rank_fusion([dense, sparse], k=60, limit=20)
+        fusion_latency_ms = (time.perf_counter() - fusion_started) * 1000
         trace = {
             "dense_topk": self._trace_hits(dense),
             "bm25_topk": self._trace_hits(sparse),
             "rrf_topk": self._trace_hits(fused),
+            "dense_latency_ms": round(dense_latency_ms, 6),
+            "bm25_latency_ms": (
+                round(bm25_latency_ms, 6) if bm25_latency_ms is not None else None
+            ),
+            "fusion_latency_ms": round(fusion_latency_ms, 6),
+            "candidate_count": len(fused),
         }
+        rerank_started = time.perf_counter()
         final = self.reranker.rerank(prepared, fused, top_k=top_k)
+        trace["rerank_latency_ms"] = round(
+            (time.perf_counter() - rerank_started) * 1000, 6
+        )
         trace["final_evidence"] = self._trace_hits(final)
+        trace["final_evidence_count"] = len(final)
         return final, trace
 
     def search(self, query: str, top_k: int = 5, model: str = "S7-1200", version: str = "") -> list[SearchHit]:

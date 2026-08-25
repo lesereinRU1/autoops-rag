@@ -4,10 +4,10 @@
 
 项目保留两套用途不同的数据集：
 
-- 当前 20 题是 LLM smoke test、回归测试和防退化测试，用来确认模型调用、拒答、安全边界、引用、Trace、fallback 等主链路仍能工作。它不属于正式准确率评测，结果不能包装成简历中的正式准确率。
+- 当前 20 题是 LLM smoke test、回归测试和防退化测试，用来确认模型调用、拒答、安全边界、引用、Trace、降级机制（fallback）等主链路仍能工作。它不属于正式准确率评测，结果不能包装成简历中的正式准确率。
 - 正式评测集位于 `data/eval/formal_questions.jsonl`，当前已有 60 题：development 40 题、test 20 题；其中可回答题 50 道、不可回答题 10 道（含安全题 4 道）。这些题仍需按本文流程持续标注和复核，不能因达到最低题数就视为正式准确率已就绪。
 
-两套数据不得互相冒充，也不得把 smoke test 的检索结果复制成正式题目的 gold。
+两套数据不得互相冒充，也不得把 smoke test 的检索结果复制成正式题目的人工标准答案（gold）。
 
 ## 人工标注要求
 
@@ -32,7 +32,7 @@
 5. 由复核人检查问题、gold、必答事实和拒答边界；进入 `test` 前改为 `reviewed`。
 6. 冻结 test 集后再运行正式评测。评测脚本只读数据集，并校验运行前后 SHA-256 一致。
 
-## Readiness 门槛
+## 准确率声明就绪门槛（Readiness）
 
 运行：
 
@@ -80,7 +80,7 @@
 
 生成层报告：
 
-- `claim_support_rate` 和 `unsupported_claim_count`；
+- 声明证据支持率（`claim_support_rate`）和无证据支持的声明数（`unsupported_claim_count`）；
 - `citation_chunk_valid_rate`；
 - `required_fact_coverage` 和 `forbidden_fact_violation_count`；
 - 不可回答题、危险题拒答准确率；
@@ -92,12 +92,12 @@ Recall@5 只能说明 gold 是否进入候选集，无法单独证明首位排�
 
 只有 readiness 全部通过后，才能结合 MRR@5、Top1 Accuracy、nDCG@5、claim support、refusal accuracy、fallback success rate 和 latency P50/P95，在简历中陈述正式评测结果。
 
-## Agentic Shadow Plan Eval
+## Agentic 影子计划评测（Shadow Plan Eval）
 
-规则式 Intent Classifier、候选 Tool Router 和 Bounded Query Planner 可以使用独立 overlay 做离线评测：
+规则式意图分类器（Intent Classifier）、候选工具路由器（Tool Router）和有界问题规划器（Bounded Query Planner）可以使用独立 overlay 做离线评测：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\eval_agentic_shadow.py
 ```
 
-数据位于 `data/eval/agentic_cases.jsonl`，报告写入 `reports/agentic_shadow_eval.json` 和 `reports/agentic_shadow_eval.md`。该评测不调用 API、检索、工具或 LLM，也不会让 shadow plan 接管正式 RAG 路由。它只衡量意图分类、工具序列、计划约束和安全阻断是否符合人工预期，不能解释为最终问答准确率。
+数据位于 `data/eval/agentic_cases.jsonl`，报告写入 `reports/agentic_shadow_eval.json` 和 `reports/agentic_shadow_eval.md`。该评测不调用 API、检索、工具或 LLM，也不会让影子计划（shadow plan）接管正式 RAG 路由。它只衡量意图分类、工具序列、计划约束和安全阻断是否符合人工预期，不能解释为最终问答准确率。

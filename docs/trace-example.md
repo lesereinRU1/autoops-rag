@@ -1,6 +1,6 @@
 # RAG Trace 结构示例
 
-下面是脱敏、手工构造的结构示例，用于说明字段关系；它不是线上日志，也不包含真实用户问题、账号、设备地址或密钥。示例字段与当前 `RagTraceResponse` schema 兼容。
+Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些证据、为什么停止”。下面是脱敏、手工构造的结构示例，用于说明字段关系；它不是线上日志，也不包含真实用户问题、账号、设备地址或密钥。示例字段与当前 `RagTraceResponse` schema 兼容。
 
 ```json
 {
@@ -124,7 +124,7 @@
     "timeout_seconds": 60.0,
     "max_rewrites": 1,
     "rounds_used": 1,
-      "tool_calls_used": 2,
+    "tool_calls_used": 2,
     "llm_calls_used": 0,
     "rewrites_used": 0,
     "elapsed_ms": 361.2
@@ -167,11 +167,12 @@
 
 ## 如何阅读
 
-1. `selected_tool` 是当前真实固定路由选择；`candidate_plan` 和 `plan` 是 shadow 结果，`plan.applied=false` 表示没有接管执行。
-2. `evidence_assessments` 解释证据为何通过或为何需要停止/重试。
-3. `rewrite_triggered`、`rewritten_queries` 和 `retrieval_rounds` 展示有界检索轮次。
+1. `selected_tool` 是已真实执行的固定路由选择；`candidate_plan` 和 `plan` 是影子模式（shadow）结果，`plan.applied=false` 表示它们没有接管执行。
+2. `evidence_assessments` 是证据充分性判断（Evidence Gate）的记录，用来解释证据为何通过或为何需要停止/重试。
+3. `rewrite_triggered`、`rewritten_queries` 和 `retrieval_rounds` 展示有界的问题改写（Query Rewrite）与检索轮次。
 4. `budget` 记录上限与已使用次数；`stop_reason` 给出最终停止原因。
-5. `final_evidence`、`injected_context` 和 `used_chunk_ids` 用于追踪注入来源。
+5. `final_evidence`、`injected_context` 和 `used_chunk_ids` 用于追踪实际注入的证据来源。
+6. `first_token_latency_ms` 当前应读作“响应可用耗时（当前不代表真实 TTFT）”；LLM 不是 Token Streaming，因此该字段不是严格的首 Token 延迟。
 
 ## 引用如何表示
 
@@ -181,4 +182,4 @@
 该状态表示通信伙伴未在监控时间内响应，应先核对对端运行状态、网络可达性和连接参数。[来源1：S7-1200 Modbus Manual，第42页]
 ```
 
-这段文本也是结构示例；`Citation Guard` 实际校验的是来源编号能否映射到本次 evidence。引用有效不自动等于每个事实都正确，仍需 claim-level 评测和人工复核。
+这段文本也是结构示例；引用校验（Citation Guard）实际检查来源编号能否映射到本次证据。引用有效不自动等于每个事实都正确，仍需 claim-level 评测和人工复核。

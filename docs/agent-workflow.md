@@ -2,6 +2,13 @@
 
 AutoOps RAG 使用 LangGraph 表达**有界、可审计的 RAG 状态机**，不是依赖模型自由规划的自主 Agent。
 
+```text
+用户请求 -> analyze_request -> 工具注册中心（Tool Registry）-> 检索与证据判断
+        -> LLM/本地摘要 -> 引用校验（Citation Guard）-> 返回结果
+```
+
+实现边界：固定节点和条件边已经真实执行；Intent Classifier、Tool Router 和 Bounded Query Planner 仍是 shadow，只记录候选决策；开放式工具循环与 Planner 主动执行尚未实现。
+
 ## 节点与职责
 
 ```mermaid
@@ -20,11 +27,11 @@ flowchart LR
 | 节点 | 输入与决策 | 失败/回退 |
 |---|---|---|
 | `analyze_request` | 识别故障码、参数意图和设备版本，选择结构化工具或手册检索 | 危险操作、越界型号和版本不足在检索前短路 |
-| `execute_tool` | 固定路由通过 Tool Registry 查询故障码或参数；普通 `search_manual` 延后执行；同时查询人工确认方案 | 结构化结果缺失或失败时仍进入手册检索，不直接编造答案 |
-| `retrieve` | 通过同一 Tool Registry 执行一次 `search_manual`，复用 Dense + BM25 + RRF + rerank，并执行标识符证据检查 | 工具异常、超时或预算耗尽时结构化停止；普通证据不足进入一次有界 Query Rewrite |
+| `execute_tool` | 固定路由通过工具注册中心（Tool Registry）查询故障码或参数；普通 `search_manual` 延后执行；同时查询人工确认方案 | 结构化结果缺失或失败时仍进入手册检索，不直接编造答案 |
+| `retrieve` | 通过同一 Tool Registry 执行一次 `search_manual`，复用 Dense + BM25 + RRF + Rerank，并执行证据充分性判断（Evidence Gate） | 工具异常、超时或预算耗尽时结构化停止；普通证据不足进入一次有界的问题改写（Query Rewrite） |
 | `rewrite` | 删除口语噪声并补充型号、版本和领域上下文 | 最多执行一次，避免无限循环与请求放大 |
-| `generate_answer` | 证据充分时调用模型，否则使用本地证据摘录 | 模型配额、超时、空响应或格式失败时逐级降级 |
-| `citation_guard` | 校验来源编号必须属于本次 evidence | 校验失败时强制切换为本地证据摘录 |
+| `generate_answer` | 证据充分时调用 LLM，否则使用本地证据摘录 | 模型配额、超时、空响应或格式失败时使用降级机制（fallback） |
+| `citation_guard` | 执行引用校验（Citation Guard），确认来源编号属于本次证据 | 校验失败时强制切换为本地证据摘录 |
 | `generate_refusal` | 生成结构化安全拒答 | 不执行检索和外部模型调用 |
 
 ## 为什么不使用普通 if-else

@@ -18,6 +18,7 @@ from app.generation.answer_generator import AnswerGenerator
 from app.generation.citation_guard import validate_citations
 from app.ingestion.pipeline import ingest_corpus
 from app.models import ChatRequest, ChatResponse, Chunk, FeedbackRequest, SearchHit, VerifiedSolutionRequest
+from app.metrics import get_runtime_metrics
 from app.retrieval.hybrid import HybridRetriever
 from app.retrieval.query_expansion import technical_terms
 from app.repositories import create_runtime_database_from_settings
@@ -31,6 +32,7 @@ LOGGER = logging.getLogger("autoops.service")
 class AutoOpsService:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self.metrics = get_runtime_metrics(self.settings.metrics_latency_window_size)
         self.memory = MemoryStore(
             self.settings.sqlite_path,
             self.settings.data_dir / "seed",
@@ -283,6 +285,12 @@ class AutoOpsService:
                 request_id,
                 type(exc).__name__,
             )
+            metrics = getattr(self, "metrics", None)
+            if metrics is not None:
+                try:
+                    metrics.record_error_event("database_error")
+                except Exception:
+                    pass
         total_ms = round((time.perf_counter() - started) * 1000, 2)
         fallback_reason = generation_usage.get("fallback_reason", "")
         attempted_models = list(generation_usage.get("attempted_models", []))
@@ -341,6 +349,20 @@ class AutoOpsService:
             "retrieval_rounds": state.get("retrieval_rounds_trace", []),
         }
         rag_trace = self.traces.append(rag_trace)
+        metrics = getattr(self, "metrics", None)
+        if metrics is not None:
+            try:
+                metrics.observe_rag_trace(
+                    rag_trace,
+                    generation_usage,
+                    agent_trace=trace,
+                )
+            except Exception as exc:
+                LOGGER.warning(
+                    "runtime metrics aggregation failed request_id=%s error_type=%s",
+                    request_id,
+                    type(exc).__name__,
+                )
         try:
             runtime_database = getattr(self, "runtime_database", None)
             if runtime_database is not None:
@@ -365,6 +387,11 @@ class AutoOpsService:
                 request_id,
                 type(exc).__name__,
             )
+            if metrics is not None:
+                try:
+                    metrics.record_error_event("database_error")
+                except Exception:
+                    pass
         return ChatResponse(
             request_id=request_id,
             answer=state["answer"],

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 from app.agent.memory import MemoryStore
 from app.agent.tools import SQLiteToolbox
 from app.document_service import DocumentPageService
+from app.metrics import MetricsCollector
 from app.models import (
     GetDocumentPageInput,
     LookupFaultCodeInput,
@@ -50,6 +51,7 @@ class ToolRegistry:
         timeout_seconds: float = 30.0,
         max_tool_calls: int = 4,
         max_workers: int = 8,
+        metrics: MetricsCollector | None = None,
     ) -> None:
         self.timeout_seconds = max(float(timeout_seconds), 0.001)
         self.max_tool_calls = max(int(max_tool_calls), 0)
@@ -61,6 +63,7 @@ class ToolRegistry:
         self._sqlite = SQLiteToolbox(memory)
         self._retriever = retriever
         self._document_pages = document_pages
+        self._metrics = metrics
         self.register("search_manual", SearchManualInput, self._search_manual)
         self.register("lookup_fault_code", LookupFaultCodeInput, self._lookup_fault_code)
         self.register("lookup_parameter", LookupParameterInput, self._lookup_parameter)
@@ -80,6 +83,7 @@ class ToolRegistry:
             timeout_seconds=getattr(settings, "tool_timeout_seconds", 30.0),
             max_tool_calls=getattr(settings, "max_tool_calls", 4),
             max_workers=getattr(settings, "max_concurrent_queries", 8),
+            metrics=getattr(service, "metrics", None),
         )
 
     @property
@@ -138,6 +142,7 @@ class ToolRegistry:
         started_at: datetime,
         started: float,
         executed: bool,
+        source: str,
     ) -> ToolResult:
         latency_ms = self._elapsed_ms(started)
         result.tool_name = tool_name
@@ -153,6 +158,12 @@ class ToolRegistry:
             result_count=result.result_count,
             error=result.error,
         )
+        if self._metrics is not None:
+            try:
+                self._metrics.observe_tool_result(result, source=source)
+            except Exception:
+                # Observability must never alter a tool result or workflow decision.
+                pass
         return result
 
     def execute(
@@ -164,6 +175,7 @@ class ToolRegistry:
         max_tool_calls: int | None = None,
         timeout_seconds: float | None = None,
         allow_aliases: bool = True,
+        source: str = "workflow",
     ) -> ToolResult:
         started = time.perf_counter()
         started_at = datetime.now(timezone.utc)
@@ -183,6 +195,7 @@ class ToolRegistry:
                 started_at=started_at,
                 started=started,
                 executed=False,
+                source=source,
             )
 
         call_limit = (
@@ -198,6 +211,7 @@ class ToolRegistry:
                 started_at=started_at,
                 started=started,
                 executed=False,
+                source=source,
             )
 
         try:
@@ -219,6 +233,7 @@ class ToolRegistry:
                 started_at=started_at,
                 started=started,
                 executed=False,
+                source=source,
             )
 
         trace_arguments = self._trace_arguments(validated)
@@ -248,6 +263,7 @@ class ToolRegistry:
             started_at=started_at,
             started=started,
             executed=True,
+            source=source,
         )
 
     def _search_manual(self, payload: BaseModel) -> ToolResult:

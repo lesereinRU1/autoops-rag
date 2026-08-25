@@ -355,6 +355,12 @@ class IndexStatusResponse(BaseModel):
 
 class HealthResponse(IndexStatusResponse):
     status: str = Field(description="服务状态", examples=["ok"])
+    metrics_collector_initialized: bool = Field(
+        default=True, description="进程内运行指标收集器是否已初始化"
+    )
+    active_requests: int = Field(
+        default=0, ge=0, description="当前正在处理且纳入运行指标的 HTTP 请求数"
+    )
 
 
 class LivenessResponse(BaseModel):
@@ -397,6 +403,30 @@ class BusinessMetricsResponse(BaseModel):
     helpful_rate: float | None = Field(description="有帮助比例；没有反馈时为空")
     verified_solutions: int = Field(description="人工确认方案数量")
     verified_solution_reuse: int = Field(description="已确认方案使用次数")
+
+
+class MetricsWindowInfo(BaseModel):
+    latency_sample_limit: int = Field(
+        ge=1, description="每类延迟最多保留的最近样本数"
+    )
+    percentile_scope: Literal["most_recent_samples"] = Field(
+        description="P50/P95/P99 的样本范围"
+    )
+    percentile_method: Literal["nearest_rank"] = Field(
+        description="窗口分位数算法"
+    )
+    percentiles_are_lifetime: Literal[False] = Field(
+        description="明确分位数不是全生命周期统计"
+    )
+
+
+class RuntimeMetricsResponse(BaseModel):
+    window: MetricsWindowInfo
+    request: dict[str, Any]
+    latency: dict[str, dict[str, int | float | None]]
+    rag: dict[str, Any]
+    llm: dict[str, int | float | None]
+    tools: dict[str, Any]
 
 
 class GraphEntity(BaseModel):

@@ -4,13 +4,19 @@
 
 当前应用与 API 版本为 `4.1.0`。
 
-它不是完全自主 Agent：Intent Classifier、Tool Router 和 Bounded Query Planner 当前主要以 shadow 方式记录候选决策；Evidence-driven Iterative Retrieval 受开关和预算约束，默认关闭。真实主流程仍由固定、可审计的 LangGraph 状态机控制。
+它不是完全自主 Agent：意图分类器（Intent Classifier）、工具路由器（Tool Router）和有界问题规划器（Bounded Query Planner）当前主要以影子模式（shadow）记录候选决策；证据驱动的迭代检索（Evidence-driven Iterative Retrieval）属于实验能力，受开关和预算约束且默认关闭。真实主流程仍由固定、可审计的 LangGraph 状态机控制。
+
+当前实现边界：
+
+- **已真实实现**：FastAPI API、固定 LangGraph 主流程、工具注册中心（Tool Registry）、四个正式工具、本地 MCP stdio Server、React + TypeScript Demo、工作流级 SSE、运行数据访问层（Repository）以及轻量运行指标。
+- **shadow / experimental**：Intent Classifier、Tool Router 和 Bounded Query Planner 只把候选决策写入 Trace；Iterative Retrieval 必须显式开启并受预算约束。
+- **尚未实现**：Planner 主动执行、开放式工具循环、远程 HTTP MCP、LLM Token Streaming，以及生产级多实例监控与运维能力。
 
 ## 项目简介
 
 工业手册篇幅长、表格多，故障码、参数名、版本和操作流程散落在不同章节。纯向量检索容易漏掉 `16#80C8`、`MB_CLIENT`、`Unit ID` 等精确标识，直接把检索结果交给大模型又可能产生无来源补充。
 
-AutoOps RAG 将文档解析、混合检索、证据判断、生成、引用校验和 Trace 拆成显式节点：先确认范围和安全边界，再检索证据；证据不足时只执行有界改写，引用异常时降级到本地证据摘要。
+AutoOps RAG 将文档解析、混合检索、证据充分性判断（Evidence Gate）、生成、引用校验（Citation Guard）和 Trace 拆成显式步骤：先确认范围和安全边界，再检索证据；证据不足时只执行有界的问题改写（Query Rewrite），引用异常时通过降级机制（fallback）返回本地证据摘要。
 
 当前数据审计结果：
 
@@ -29,14 +35,14 @@ Python 3.11、FastAPI、LangGraph、MCP Python SDK、Qdrant、BGE/FastEmbed、BM
 | 能力 | 实现 |
 |---|---|
 | 文档结构化 | PyMuPDF 解析正文和表格，按页级文本与表格行构建切片并保留来源元数据 |
-| Hybrid Retrieval | Qdrant Dense Retrieval + BM25，使用 RRF 融合和轻量重排 |
-| 可控工作流 | LangGraph 显式编排安全门控、结构化查询、检索、Evidence Gate、Rewrite、生成和 Citation Guard |
+| Hybrid Retrieval | Qdrant Dense Retrieval + BM25，使用 RRF 融合和轻量 Rerank |
+| 可控工作流 | LangGraph 显式编排安全门控、结构化查询、检索、Evidence Gate、Query Rewrite、生成和 Citation Guard |
 | 证据约束 | Evidence Gate 检查证据数量、相关度和技术标识符覆盖；证据不足时不允许模型自由补全 |
-| 引用校验 | Citation Guard 校验回答引用是否来自本次 evidence，失败时降级为本地证据摘要 |
-| 工具封装 | LangGraph 固定路由通过统一 Tool Registry 执行 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`，统一校验参数、结果、Trace、预算与超时 |
+| 引用校验 | Citation Guard 校验回答引用是否来自本次证据，失败时降级为本地证据摘要 |
+| 工具封装 | LangGraph 固定路由通过 Tool Registry 执行 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`，统一校验参数、结果、Trace、预算与超时 |
 | 本地 MCP | stdio MCP Server 暴露同一组四个工具，直接复用 Tool Registry 和 Service，不经过 FastAPI HTTP 接口 |
 | Agentic Shadow | 规则式 Intent Classifier、Tool Router 和 Bounded Planner 生成候选计划，仅写入 Trace |
-| 有界迭代检索 | 可选二次检索，受轮数、Rewrite、工具、LLM 和超时预算控制；默认关闭 |
+| 有界迭代检索 | 可选二次检索，受轮数、Query Rewrite、工具、LLM 和超时预算控制；默认关闭 |
 | 可观测性 | Trace 记录检索候选、证据评估、候选计划、工具调用、预算、停止原因、模型和延迟 |
 | Web 演示 | 新增 React + TypeScript 页面和 workflow SSE，可实时展示节点进度及最终 Answer、Citation、Evidence、Trace；原生 HTML/JavaScript 页面继续保留 |
 | 运行数据 | Conversation、Feedback、Verified Solution、Trace metadata 和 Evaluation record 通过独立 Repository 接口访问；默认 SQLite，可选 PostgreSQL |
@@ -85,14 +91,19 @@ flowchart LR
 
 ## RAG 主流程
 
+```text
+用户请求 -> FastAPI -> Service -> LangGraph -> Tool Registry -> RAG/工具
+        -> LLM 或本地证据摘要 -> Citation Guard -> 返回答案、证据和 Trace
+```
+
 1. FastAPI 接收问题并生成 `request_id`。
 2. Service 处理会话上下文，调用 LangGraph。
 3. Scope/Safety Gate 在检索和模型调用前短路危险请求、越界型号和资料不足的版本问题。
 4. Shadow 层生成 intent、candidate plan 和 bounded structured plan，但不替代真实路由。
-5. 固定路由通过 Tool Registry 执行结构化查询；`retrieve` 节点通过同一 Registry 执行一次 `search_manual`，进入 Dense + BM25 + RRF + rerank 检索。
+5. 固定路由通过 Tool Registry 执行结构化查询；`retrieve` 节点通过同一 Registry 执行一次 `search_manual`，进入 Dense + BM25 + RRF + Rerank 检索。
 6. Evidence Gate 判断证据是否足够，并记录原始缺失词、过滤后标识符和被忽略泛词。
 7. 默认路径保留原有单次 Query Rewrite；实验性迭代检索只有在显式开启且预算允许时才补充一轮证据。
-8. 证据充分时执行 grounded generation；模型不可用时按 fallback 链降级。
+8. 证据充分时执行基于证据的生成（grounded generation）；模型不可用时按 fallback 链降级。
 9. Citation Guard 校验引用，输出回答、证据、运行统计和完整 Trace。
 
 ## Agentic RAG 扩展能力
@@ -100,9 +111,9 @@ flowchart LR
 - `IntentClassifier`：规则式识别故障诊断、参数、表格、跨章节流程、版本、安全和越界意图，不调用 LLM。
 - `ToolRouter`：为 intent 生成白名单候选工具序列；候选序列仅进入 shadow Trace，不决定当前真实路由。
 - `BoundedQueryPlanner`：最多生成 3 个白名单候选步骤，带 `max_rounds`、`max_tool_calls` 和 `applied=false`；当前不执行这些步骤。
-- `ToolRegistry`：注册四个带独立 Pydantic 输入模型的核心工具，统一处理参数校验、未知工具、`max_tool_calls`、单工具 timeout、异常和 ToolCallTrace。
-- `SQLiteToolbox`：作为 Registry 中故障码和参数工具的底层实现，以统一 `ToolResult` 返回结构化 data、证据、provenance、耗时和错误。工具结果不能在没有可靠来源时直接成为最终事实。
-- `DocumentPageService`：优先按已处理 chunk 的文档与页码定位证据，必要时只打开精确匹配 PDF 的指定页，不扫描整份 PDF。
+- `ToolRegistry`：工具注册中心，登记四个带独立 Pydantic 输入模型的核心工具，并统一处理参数校验、未知工具、`max_tool_calls`、单工具 timeout、异常和 `ToolCallTrace`。
+- `SQLiteToolbox`：结构化知识查询组件，作为 Registry 中故障码和参数工具的底层实现，以统一 `ToolResult` 返回结构化 data、证据、provenance、耗时和错误。工具结果不能在没有可靠来源时直接成为最终事实。
+- `DocumentPageService`：原始页证据读取服务，优先按已处理 chunk 的文档与页码定位证据，必要时只打开精确匹配 PDF 的指定页，不扫描整份 PDF。
 - Iterative Retrieval：只在证据不足、存在有效技术标识符且预算允许时重试；`0`、`PLC`、手册、参数等泛词不能单独触发重试。
 
 这些能力构成“轻量级 Agentic RAG”：系统能够分析意图、形成受约束计划、选择候选工具、评估证据并决定是否停止，但不允许开放式工具生成或无限循环。
@@ -188,9 +199,9 @@ request_started -> analyzing -> tool_selected -> retrieving -> reranking
                 -> generating -> citation_check -> completed
 ```
 
-Safety Gate 拒绝路径会跳过工具和检索，异常路径以 `error` 结束。每个事件包含 `event`、`request_id`、`timestamp`、`stage`、`message` 和经过脱敏的 `data`；`completed.data.response` 是与 `/api/chat` 相同的完整 `ChatResponse`。页面基于该响应展示 Answer、可展开 Citation、Evidence 和 Trace，包括工具调用、改写、检索轮次、停止原因、延迟、模型/provider 表示及可用的 token usage。
+安全门控（Safety Gate）拒绝路径会跳过工具和检索，异常路径以 `error` 结束。每个事件包含 `event`、`request_id`、`timestamp`、`stage`、`message` 和经过脱敏的 `data`；`completed.data.response` 是与 `/api/chat` 相同的完整 `ChatResponse`。页面基于该响应展示 Answer、可展开 Citation、Evidence 和 Trace，包括工具调用、问题改写、检索轮次、停止原因、延迟、模型/provider 表示及可用的 Token 消耗（token usage）。
 
-当前是 workflow event streaming，不是 token-by-token streaming：LLM Client 仍使用非流式请求，最终回答随 `completed` 事件一次性返回。页面的“停止接收”使用浏览器 AbortController，只停止前端等待和连接；后端会尽快停止等待，但正在执行的同步检索或模型 I/O 可能短暂继续。Planner/Router 仍为 shadow；本地 MCP 继续作为独立 stdio 入口，不经 SSE。
+当前是工作流事件流（workflow event streaming），不是 Token Streaming：LLM Client 仍使用非流式请求，最终回答随 `completed` 事件一次性返回。页面的“停止接收”使用浏览器 AbortController，只停止前端等待和连接；后端会尽快停止等待，但正在执行的同步检索或模型 I/O 可能短暂继续。Planner/Router 仍为 shadow；本地 MCP 继续作为独立 stdio 入口，不经 SSE。
 
 ## 本地 MCP Server
 
@@ -219,7 +230,7 @@ stdio Server 启动后会等待 MCP Client 通过标准输入/输出通信，不
 
 当前边界：只实现本地 stdio transport，没有远程 HTTP MCP、认证、TLS 或多租户隔离；`get_document_page` 仍受现有精确文档匹配和页码约束，不能读取任意文件。Planner/Router 仍为 shadow，LangGraph 直接调用 Tool Registry，不通过 MCP 回调自身。因此系统仍不是 fully autonomous Agent，也不代表生产级远程 MCP 部署。
 
-## Runtime Repository 与 PostgreSQL
+## 运行数据访问层（Runtime Repository）与 PostgreSQL
 
 阶段 D 只抽象运行型数据，不把整个项目强制迁到 PostgreSQL：
 
@@ -230,7 +241,7 @@ stdio Server 启动后会等待 MCP Client 通过标准输入/输出通信，不
 | Runtime Repository | `conversation_memory`、`conversation_turns`、`answer_feedback`、`verified_solutions`、`solution_reuse_events`、`trace_metadata`、`evaluation_runs`、`evaluation_records` |
 | JSONL / Markdown | 完整脱敏 RAG Trace 和离线评测报告，继续保留 |
 
-运行数据由 `ConversationRepository`、`FeedbackRepository`、`VerifiedSolutionRepository`、`TraceRepository` 和 `EvaluationRepository` 分责；SQLAlchemy 实现使用短生命周期 Session，每次事务结束都会 commit 或 rollback 并关闭 Session。Service 和 Graph 不直接持有 ORM Session，也不写 SQL。
+运行数据由 `ConversationRepository`、`FeedbackRepository`、`VerifiedSolutionRepository`、`TraceRepository` 和 `EvaluationRepository` 分责；这些代码类名保持原样。SQLAlchemy 实现使用短生命周期 Session，每次事务结束都会 commit 或 rollback 并关闭 Session。Service 和 Graph 不直接持有 ORM Session，也不写 SQL。
 
 默认配置不需要 PostgreSQL：
 
@@ -272,7 +283,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build -
 
 `/health` 和 `/api/index/status` 会分别返回 `database_backend`、`database_status` 与脱敏的 `database_error_type`。运行数据库短暂不可用时，会话上下文、会话写入和 Trace metadata 会降级，不阻断静态手册检索；显式 Feedback/Verified Solution 写入仍会返回失败，不能伪装成已保存。
 
-Trace 采用“数据库 metadata + JSONL 完整 payload”：Repository 保存 `request_id`、时间、`session_id`、状态、错误、query/rewrite、工具、模型、延迟、token usage 和 stop reason；完整 retrieval candidates/evidence 继续写脱敏 JSONL。Formal evaluation 仍生成原 JSON/Markdown，同时写 evaluation run/record metadata，不改变指标口径。
+Trace 采用“数据库 metadata + JSONL 完整 payload”：Repository 保存 `request_id`、时间、`session_id`、状态、错误、query/rewrite、工具、模型、延迟、Token 消耗和 stop reason；完整 retrieval candidates/evidence 继续写脱敏 JSONL。Formal evaluation 仍生成原 JSON/Markdown，同时写 evaluation run/record metadata，不改变指标口径。
 
 当前 PostgreSQL 支持是单实例、同步 SQLAlchemy 和基础连接池方案，不包含高可用、备份恢复、读写分离、远程密钥管理或生产级运维承诺。
 
@@ -336,9 +347,116 @@ DATABASE_BACKEND=sqlite
 
 因此默认 API 不会让 Agentic Router、Planner 或 Iterative Retrieval 接管主流程。即使启用 Router 或 Planner 的配置开关，当前代码也只产生 shadow trace。固定 Graph 的真实工具调用已受 Registry 的 `max_tool_calls` 和单工具 timeout 约束；其他 Agent budget 字段继续约束迭代检索和生成阶段。
 
+## 可观测性（Observability）
+
+### 这套监控是做什么的
+
+这套轻量监控用于回答三个问题：系统处理了多少请求、请求是否成功，以及主要耗时发生在检索、Rerank、LLM 还是工具调用阶段。运行指标采集器（MetricsCollector）在当前进程内汇总数据，不改变 RAG 主流程。
+
+```text
+业务请求 -> FastAPI 中间件 -> Service / LangGraph / Tool / LLM
+        -> Trace（单次请求明细）+ 运行指标采集器（MetricsCollector，多请求汇总）
+        -> /metrics 和 /api/metrics/runtime
+```
+
+请求指标覆盖业务 API，但排除静态资源、Demo、OpenAPI/文档、健康检查、`/api/index/status` 和指标接口自身。一次 `/api/chat/stream` 无论产生多少个 SSE 事件都只结算一次；SSE 超时或内部错误虽然通过 HTTP 200 返回安全的 `error` 事件，仍会计入失败或超时。MCP stdio 调用不计入 HTTP 请求指标。
+
+### 能看到哪些指标
+
+HTTP 请求指标：
+
+| 中文名称 | 英文变量名 | 一句话解释 |
+| --- | --- | --- |
+| 请求总数 | `request_total` | 系统一共结算了多少次业务 HTTP 请求。 |
+| 成功请求数 | `request_success_total` | 有多少次业务请求成功完成。 |
+| 失败请求数 | `request_error_total` | 有多少次业务请求以错误结束。 |
+| 超时请求数 | `request_timeout_total` | 有多少次业务请求因超时结束。 |
+| 当前正在处理的请求数 | `active_requests` | 此刻仍在处理中、尚未结算的业务请求有多少。 |
+| 请求错误分类 | `errors_by_category` | 失败请求按有限、固定的错误类别分别计数。 |
+| 请求耗时 | `request_ms` | 记录业务请求从开始到结算的总耗时。 |
+
+RAG 与检索指标：
+
+| 中文名称 | 英文变量名 | 一句话解释 |
+| --- | --- | --- |
+| RAG 请求数 | `rag_request_total` | 一共有多少次请求进入了 RAG 结果结算。 |
+| 问题改写次数（Query Rewrite） | `rewrite_total` | 工作流一共执行了多少次 Query Rewrite。 |
+| 问题改写请求数 | `rewrite_request_total` | 有多少个请求至少执行过一次 Query Rewrite。 |
+| 改写率 | `rewrite_rate` | 多少请求因为证据不足等原因触发了 Query Rewrite。 |
+| 拒答次数（refusal） | `refusal_total` | 有多少次请求因安全、范围或证据原因返回拒答。 |
+| 拒答率 | `refusal_rate` | 拒答请求占全部 RAG 请求的比例。 |
+| 证据不足次数（evidence insufficient） | `evidence_insufficient_total` | 有多少次最终结果被判定为证据不足。 |
+| 引用校验失败次数（citation failure） | `citation_guard_failure_total` | 有多少次回答没有通过 Citation Guard 引用校验。 |
+| 降级/备用模型次数（fallback） | `fallback_total` | 主模型失败后使用备用模型的次数。 |
+| 降级率 | `fallback_rate` | 多少次 RAG 请求使用了降级/备用模型。 |
+| 检索请求数（retrieval） | `retrieval_request_total` | 每次实际执行 `search_manual` 计一次，问题改写后再次检索会另计一次。 |
+| 检索候选数 | `retrieved_candidate_count` | 检索与融合阶段一共返回了多少候选片段。 |
+| 最终证据数 | `final_evidence_count` | 最终保留并交给回答阶段的证据片段有多少。 |
+| 检索耗时 | `retrieval_ms` | 记录一次 `search_manual` 的完整检索耗时，不会把 Dense、BM25、RRF 和 Rerank 分别重复计成检索请求。 |
+| Dense/BM25/RRF/Rerank 耗时 | `dense_ms` / `bm25_ms` / `fusion_ms` / `rerank_ms` | 分别记录 Dense、BM25、RRF 融合和 Rerank 阶段的耗时。 |
+
+LLM 与工具指标：
+
+| 中文名称 | 英文变量名 | 一句话解释 |
+| --- | --- | --- |
+| LLM 调用次数 | `llm_call_total` | 系统一共尝试调用了多少次 LLM。 |
+| LLM 错误次数 | `llm_error_total` | 有多少次 LLM 调用最终失败。 |
+| LLM 降级次数 | `llm_fallback_total` | 有多少次 LLM 调用切换到了降级/备用模型（fallback）。 |
+| LLM 耗时 | `llm_ms` | 记录 LLM 请求到完整响应可用的耗时。 |
+| Token 消耗（token usage） | `input_tokens` / `output_tokens` / `total_tokens` | 分别记录输入、输出和总 Token 数；缺少 Provider 用量时不会猜测。 |
+| 有 Token 数据的请求数 | `token_usage_request_total` | 有多少次请求真实返回了 `total_tokens`，它也是平均 Token 数的分母。 |
+| 平均 Token 数 | `average_total_tokens` | 仅对真实返回 Token 消耗的请求计算平均值。 |
+| 工具调用次数（tool call） | `tool_call_total` | 四个正式工具在 Tool Registry 统一完成点一共执行了多少次。 |
+| 工具成功/失败/超时次数 | `tool_success_total` / `tool_error_total` / `tool_timeout_total` | 分别表示工具调用成功、失败和超时的次数。 |
+| MCP 工具调用次数 | `mcp_tool_call_total` | 通过 MCP 发起的工具调用次数；它不会让通用工具计数重复累加。 |
+| 工具耗时 | `tool_ms` | 记录工具调用耗时，并按固定工具名分别汇总。 |
+
+### `/metrics` 是什么
+
+`GET /metrics` 返回 Prometheus 兼容的文本格式（Prometheus-compatible text exposition），方便外部采集器读取计数和延迟数据。项目当前只提供这个端点，没有随项目启动 Prometheus Server 或 Grafana，也不代表已经搭建生产级监控平台。
+
+### `/api/metrics/runtime` 是什么
+
+`GET /api/metrics/runtime` 返回适合人和 Web 页面阅读的 JSON，按 `request`、`latency`、`rag`、`llm`、`tools` 五组展示运行指标，并通过 `window` 说明延迟窗口配置。`GET /api/metrics/business` 仍是原有的业务反馈与已验证方案指标，职责和返回结构不变。
+
+### P50/P95/P99 怎么理解
+
+延迟分位数（P50/P95/P99）用于描述“大多数请求有多快”，不是成功率：
+
+- P50 延迟：50% 的请求耗时低于或等于这个值，也可理解为典型请求耗时。
+- P95 延迟：95% 的请求耗时低于或等于这个值，适合观察较慢请求。
+- P99 延迟：99% 的请求耗时低于或等于这个值，适合观察尾部慢请求。
+
+`METRICS_LATENCY_WINDOW_SIZE` 默认是 `1000`。这些分位数使用最近最多 1000 个样本的滚动窗口（rolling window），并采用 nearest-rank 算法；API 字段为 `rolling_p50_ms`、`rolling_p95_ms`、`rolling_p99_ms`。它们不是进程启动以来的全生命周期分位数。延迟的 `count`、`sum` 和 `average` 仍从当前进程启动后累计。
+
+### Trace 和 Metrics 有什么区别
+
+- Trace（请求追踪）回答“这一次请求发生了什么”：脱敏后的完整 payload 写入本地 JSONL，运行数据库只保存 metadata，可以包含 query、候选证据、工具参数、停止原因和模型用量。
+- Metrics（运行指标）回答“整体运行得怎么样”：只保存聚合计数、数值样本和固定低基数分类，不保存 request ID、完整 query、用户文本、API Key、异常消息或完整 Trace。
+- 运行指标不会扫描 JSONL，也不会在每次请求时查询 SQLite/PostgreSQL；当前进程重启后，内存中的指标会清零。
+
+### 当前限制
+
+- 运行指标是单进程视角，多 worker 或独立 MCP stdio 进程的指标不会自动合并。
+- 外部 Provider 当前没有可靠、统一的规范字段，因此没有按 provider/model 建立指标标签。
+- `first_token_latency_ms` 应理解为“响应可用耗时（当前不代表真实 TTFT）”：当前 LLM 使用非流式请求，不是 Token Streaming，只有完整响应返回后才可用，因此它不是真正的首 Token 延迟（Time to First Token, TTFT）。
+- 这套能力定位为轻量运行观测，不代表生产级监控体系。
+
+### 面试快速解释版
+
+1. 这套可观测性分为单请求追踪 Trace 和多请求聚合 Metrics。
+2. 请求总数、成功、失败、超时和处理中请求都在统一位置一次性结算。
+3. RAG 指标能看问题改写、拒答、证据不足、引用失败和模型降级。
+4. 每次真实执行 `search_manual` 才计一次检索，内部四阶段不会重复计数。
+5. 工具调用只在 Tool Registry 完成点计数，MCP 只标记调用来源。
+6. `/metrics` 给 Prometheus 采集，`/api/metrics/runtime` 给人和页面读取 JSON。
+7. P50/P95/P99 是最近 1000 个样本滚动窗口的延迟分位数，不是全生命周期统计。
+8. 当前 LLM 非 Token Streaming，所以 `first_token_latency_ms` 实际表示完整响应可用耗时，不代表真实 TTFT。
+9. 指标保存在当前进程内，重启会清零，多进程之间暂不自动合并。
+
 ## 当前评测摘要
 
-- Pytest：146 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；原有 136 项全部保留并通过。
+- Pytest：默认环境 156 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；配置真实专用 DSN 后为 157 项通过。阶段 E 新增 10 项运行指标测试，原有 147 项全部保留并通过。
 - Formal validation：60 题，0 validation errors；由于官方资料占比和独立复核数量尚未达到门槛，`ready_for_resume_accuracy_claim=false`。
 - Ranking-only development：Strict Recall@5 1.0000、MRR@5 0.9343、nDCG@5 0.9377、Top1 Accuracy 0.8857。
 - Agentic shadow：24 个 overlay case，Intent/Tool/Plan Valid 均为 1.0000；Budget/Whitelist/Loop Violation 均为 0。
@@ -366,11 +484,12 @@ autoops-rag/
 ├─ app/
 │  ├─ agent/          # LangGraph、intent、planner、tools、iterative controller
 │  ├─ ingestion/      # PDF 与表格解析、切片
-│  ├─ retrieval/      # Dense、BM25、RRF、rerank
+│  ├─ retrieval/      # Dense、BM25、RRF、Rerank
 │  ├─ generation/     # 模型调用、fallback、Citation Guard
 │  ├─ mcp/            # 本地 stdio MCP 协议适配层
 │  ├─ repositories/   # 运行数据接口与 SQLAlchemy SQLite/PostgreSQL 实现
 │  ├─ api.py          # FastAPI 接口
+│  ├─ metrics.py      # 进程内运行指标、rolling window 与 Prometheus exposition
 │  ├─ service.py      # 服务编排
 │  └─ tracing.py      # Trace 脱敏与持久化
 ├─ data/eval/         # Formal 与 Agentic overlay 数据
@@ -387,6 +506,7 @@ autoops-rag/
 ## 相关文档
 
 - `docs/architecture.md`：系统架构与数据流
+- `docs/terminology.md`：容易混淆的项目术语与实现状态说明
 - `docs/eval-summary.md`：当前指标和口径
 - `docs/trace-example.md`：可读 Trace 示例
 - `docs/interview-notes.md`：面试讲解边界

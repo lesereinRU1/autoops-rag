@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 90.0
     rate_limit_per_minute: int = 300
     rate_limit_max_clients: int = 10000
+    metrics_latency_window_size: int = 1000
     index_admin_api_key: str = ""
     qdrant_url: str = ""
     qdrant_api_key: str = ""
