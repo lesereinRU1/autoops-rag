@@ -16,9 +16,16 @@ from app.agent.iterative import (
     should_retry_retrieval,
 )
 from app.agent.planner import BoundedQueryPlanner
+from app.agent.tool_registry import ToolRegistry
 from app.agent.tool_router import candidate_tools
-from app.agent.tools import format_alarm, format_parameter, format_verified_solution
+from app.agent.tools import format_verified_solution
 from app.generation.citation_guard import validate_citations
+from app.models import (
+    LookupFaultCodeInput,
+    LookupParameterInput,
+    SearchManualInput,
+    ToolResult,
+)
 from app.retrieval.query_expansion import expand_query
 from app.safety import format_policy_refusal
 
@@ -56,8 +63,27 @@ def build_graph(service):
     iterative_enabled = bool(
         getattr(service.settings, "enable_iterative_retrieval", False)
     )
+    registry = getattr(service, "tool_registry", None)
+    if registry is None and hasattr(service, "memory") and hasattr(service, "retriever"):
+        registry = ToolRegistry.from_service(service)
+
+    def emit_workflow_event(
+        state: AgentState,
+        stage: str,
+        message: str,
+        data: dict | None = None,
+    ) -> None:
+        callback = state.get("workflow_event_callback")
+        if not callable(callback):
+            return
+        try:
+            callback(stage, message, data or {})
+        except Exception:
+            # A disconnected UI observer must never alter the RAG result.
+            return
 
     def analyze_request(state: AgentState) -> AgentState:
+        emit_workflow_event(state, "analyzing", "正在分析问题、范围与安全边界")
         agent_started_at = time.monotonic()
         question = state["question"]
         policy_question = state.get("original_question", question)
@@ -85,25 +111,34 @@ def build_graph(service):
             "mb_data_len", "rd_mb_data_len", "wr_mb_data_len",
         )
         if alarm:
-            tool = "lookup_alarm_code"
+            tool = "lookup_fault_code"
             reason = f"检测到故障码 {alarm}，先查结构化故障码，再检索手册证据"
         elif any(word in question.lower() for word in parameter_words):
-            tool = "check_parameter_range"
+            tool = "lookup_parameter"
             reason = "检测到参数/范围意图，先查结构化参数，再检索版本化手册"
         else:
             tool = "search_manual"
             reason = "未检测到精确故障码或参数，执行混合语义检索"
+        selected_tool = {
+            "lookup_fault_code": "lookup_alarm_code",
+            "lookup_parameter": "check_parameter_range",
+        }.get(tool, tool)
 
         kg = service.memory.expand_knowledge_graph(question)
         trace = [
             {
                 "node": "query_analyze",
                 "alarm_code": alarm or "",
-                "parameter_intent": tool == "check_parameter_range",
+                "parameter_intent": tool == "lookup_parameter",
                 "device_model": state.get("model", "S7-1200"),
                 "version": state.get("version", ""),
             },
-            {"node": "route", "tool": tool, "reason": reason},
+            {
+                "node": "route",
+                "tool": selected_tool,
+                "registry_tool": tool,
+                "reason": reason,
+            },
             {
                 "node": "intent_classifier_shadow",
                 "shadow": True,
@@ -151,6 +186,13 @@ def build_graph(service):
             initial_stop_reason = "insufficient_evidence"
         else:
             initial_stop_reason = ""
+        if not refusal_reason:
+            emit_workflow_event(
+                state,
+                "tool_selected",
+                "已完成固定路由并选择受控工具",
+                {"tool_name": tool, "selected_tool": selected_tool},
+            )
         initial_tracking = {
             **state,
             "agent_started_at": agent_started_at,
@@ -159,7 +201,8 @@ def build_graph(service):
             "tool_calls": [],
         }
         return {
-            "selected_tool": tool,
+            "selected_tool": selected_tool,
+            "execution_tool": tool,
             "intent": intent_result,
             "candidate_plan": candidate_plan,
             "plan": structured_plan,
@@ -187,6 +230,12 @@ def build_graph(service):
     def generate_refusal(state: AgentState) -> AgentState:
         reason = state.get("refusal_reason", "现有资料不足")
         kind = state.get("refusal_kind", "unanswerable_scope")
+        emit_workflow_event(
+            state,
+            "generating",
+            "安全或范围检查未通过，正在生成边界说明",
+            {"refusal_kind": kind},
+        )
         trace = list(state.get("agent_trace", []))
         trace.append({"node": "safe_refusal", "category": kind, "reason": reason})
         return {
@@ -219,21 +268,14 @@ def build_graph(service):
     def execute_tool(state: AgentState) -> AgentState:
         original_question = state["question"]
         model = state.get("model", "S7-1200")
-        tool = state["selected_tool"]
+        tool = state.get("execution_tool", state["selected_tool"])
         trace = list(state.get("agent_trace", []))
         tool_calls = list(state.get("tool_calls", []))
         result_parts: list[str] = []
 
         verified_started = time.perf_counter()
         verified = service.memory.find_verified_solution(original_question, model)
-        tool_calls.append(
-            {
-                "tool": "lookup_verified_solution",
-                "round": state.get("round_count", 0),
-                "success": verified is not None,
-                "latency_ms": round((time.perf_counter() - verified_started) * 1000, 2),
-            }
-        )
+        verified_latency_ms = round((time.perf_counter() - verified_started) * 1000, 2)
         verified_used = verified is not None
         if verified:
             result_parts.append(format_verified_solution(verified))
@@ -245,48 +287,67 @@ def build_graph(service):
                     "node": "verified_memory",
                     "solution_id": verified["id"],
                     "similarity": verified["similarity"],
+                    "latency_ms": verified_latency_ms,
                     "decision": "reuse_with_manual_verification",
                 }
             )
         else:
-            trace.append({"node": "verified_memory", "decision": "no_verified_match"})
+            trace.append(
+                {
+                    "node": "verified_memory",
+                    "latency_ms": verified_latency_ms,
+                    "decision": "no_verified_match",
+                }
+            )
 
-        if tool == "lookup_alarm_code":
-            structured_started = time.perf_counter()
-            record = service.memory.lookup_alarm(extract_alarm(original_question) or original_question, model)
-            result_parts.append(format_alarm(record))
-            tool_calls.append(
-                {
-                    "tool": "lookup_fault_code",
-                    "round": state.get("round_count", 0),
-                    "success": record is not None,
-                    "latency_ms": round((time.perf_counter() - structured_started) * 1000, 2),
-                }
+        result: ToolResult | None = None
+        if registry is not None and tool == "lookup_fault_code":
+            result = registry.execute(
+                tool,
+                LookupFaultCodeInput(
+                    code=extract_alarm(original_question) or original_question,
+                    model=model,
+                    version=state.get("version", ""),
+                ),
+                tool_calls=tool_calls,
+                max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
             )
-        elif tool == "check_parameter_range":
-            structured_started = time.perf_counter()
-            value_match = VALUE_PATTERN.search(original_question.replace("S7-1200", ""))
-            value = float(value_match.group(1)) if value_match else None
-            record = service.find_parameter(original_question, model)
-            result_parts.append(format_parameter(record, value))
-            tool_calls.append(
-                {
-                    "tool": "lookup_parameter",
-                    "round": state.get("round_count", 0),
-                    "success": record is not None,
-                    "latency_ms": round((time.perf_counter() - structured_started) * 1000, 2),
-                }
+        elif registry is not None and tool == "lookup_parameter":
+            value_match = VALUE_PATTERN.search(
+                original_question.replace("S7-1200", "")
             )
+            result = registry.execute(
+                tool,
+                LookupParameterInput(
+                    name=original_question,
+                    model=model,
+                    version=state.get("version", ""),
+                    value=float(value_match.group(1)) if value_match else None,
+                ),
+                tool_calls=tool_calls,
+                max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
+            )
+        if result is not None:
+            if result.content:
+                result_parts.append(result.content)
+            if result.call_trace is not None:
+                tool_calls.append(result.call_trace.model_dump(mode="json"))
 
         trace.append(
             {
                 "node": "tool_execute",
                 "tool": tool,
+                "deferred_to_retrieve": tool == "search_manual",
                 "structured_result": bool(result_parts),
+                "success": result.success if result is not None else True,
+                "error": result.error if result is not None else "",
                 "verified_solution_used": verified_used,
             }
         )
         next_state = {**state, "tool_calls": tool_calls}
+        stop_reason = state.get("stop_reason", "")
+        if result is not None and result.error == "max_tool_calls_reached":
+            stop_reason = "max_tool_calls_reached"
         return {
             "tool_result": "\n\n".join(part for part in result_parts if part),
             "agent_trace": trace,
@@ -295,6 +356,7 @@ def build_graph(service):
                 list(verified.get("source_chunk_ids", [])) if verified else []
             ),
             "tool_calls": tool_calls,
+            "stop_reason": stop_reason,
             "budget": budget_snapshot(next_state, service.settings),
         }
 
@@ -302,21 +364,54 @@ def build_graph(service):
         query = state.get("rewritten_query", state["question"])
         model = state.get("model", "S7-1200")
         version = state.get("version", "")
-        tool = state["selected_tool"]
+        tool = state.get("execution_tool", state["selected_tool"])
         trace = list(state.get("agent_trace", []))
+        emit_workflow_event(
+            state,
+            "retrieving",
+            "正在通过 Tool Registry 检索手册证据",
+            {"query": query, "round": int(state.get("round_count", 0)) + 1},
+        )
 
         raw_kg_terms = state.get("knowledge_graph", {}).get("expansion_terms", [])
         # Graph expansion is intentionally conservative: broad one-hop expansion can
         # dilute role/address questions. Use it for exact alarm diagnosis; otherwise
         # keep the graph as explainable context and reserve expansion for a retry.
-        kg_terms = raw_kg_terms[:3] if tool == "lookup_alarm_code" else []
+        kg_terms = raw_kg_terms[:3] if tool == "lookup_fault_code" else []
         search_query = " ".join([query, *kg_terms]).strip()
         expansion_terms = expand_query(search_query)[1] if service.settings.enable_query_expansion else []
-        retrieval_started = time.perf_counter()
-        new_evidence, retrieval_trace = service.retriever.search_with_trace(
-            search_query, top_k=5, model=model, version=version
+        existing_tool_calls = list(state.get("tool_calls", []))
+        if registry is None:
+            search_result = ToolResult(
+                tool_name="search_manual",
+                success=False,
+                error="tool_registry_unavailable",
+            )
+        else:
+            search_result = registry.execute(
+                "search_manual",
+                SearchManualInput(
+                    query=search_query,
+                    model=model,
+                    version=version,
+                    top_k=5,
+                ),
+                tool_calls=existing_tool_calls,
+                max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
+            )
+        new_evidence = list(search_result.evidence) if search_result.success else []
+        retrieval_trace = dict(search_result.metadata.get("retrieval_trace", {}))
+        emit_workflow_event(
+            state,
+            "reranking",
+            "检索完成，正在评估融合排序结果",
+            {
+                "result_count": len(new_evidence),
+                "success": search_result.success,
+                "error": search_result.error,
+            },
         )
-        round_retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
+        round_retrieval_ms = float(search_result.latency_ms)
         previous_retrieval_ms = float(state.get("retrieval_trace", {}).get("latency_ms", 0.0))
         retrieval_trace["round_latency_ms"] = round(round_retrieval_ms, 2)
         retrieval_trace["latency_ms"] = round(previous_retrieval_ms + round_retrieval_ms, 2)
@@ -351,16 +446,11 @@ def build_graph(service):
         )
         identifiers_supported = bool(assessment["identifiers_supported"])
         sufficient = bool(assessment["sufficient"])
-        tool_calls = list(state.get("tool_calls", []))
-        tool_calls.append(
-            {
-                "tool": "search_manual",
-                "round": next_round,
-                "success": bool(new_evidence),
-                "latency_ms": round(round_retrieval_ms, 2),
-                "query": search_query,
-            }
-        )
+        tool_calls = existing_tool_calls
+        if search_result.call_trace is not None:
+            tool_call = search_result.call_trace.model_dump(mode="json")
+            tool_call["round"] = next_round
+            tool_calls.append(tool_call)
         decision_state = {
             **state,
             "evidence": evidence,
@@ -370,7 +460,15 @@ def build_graph(service):
         retry_allowed = should_retry_retrieval(
             decision_state, assessment, service.settings
         )
-        if sufficient:
+        tool_stop_reason = {
+            "max_tool_calls_reached": "max_tool_calls_reached",
+            "tool_timeout": "tool_timeout",
+            "tool_execution_failed": "tool_error",
+            "tool_registry_unavailable": "tool_error",
+        }.get(search_result.error, "")
+        if tool_stop_reason:
+            stop_reason = tool_stop_reason
+        elif sufficient:
             stop_reason = "evidence_sufficient"
         elif iterative_enabled and retry_allowed:
             stop_reason = ""
@@ -415,6 +513,8 @@ def build_graph(service):
                 "distinct_documents": distinct_docs,
                 "top_score": round(top_score, 6),
                 "query_expansion_terms": expansion_terms,
+                "tool_success": search_result.success,
+                "tool_error": search_result.error,
             }
         )
         trace.append(
@@ -450,6 +550,12 @@ def build_graph(service):
         }
 
     def after_evidence_gate(state: AgentState) -> str:
+        if state.get("stop_reason") in {
+            "max_tool_calls_reached",
+            "tool_timeout",
+            "tool_error",
+        }:
+            return "generate_answer"
         if iterative_enabled:
             if state.get("evidence_sufficient"):
                 return "generate_answer"
@@ -465,6 +571,12 @@ def build_graph(service):
         return "rewrite"
 
     def rewrite(state: AgentState) -> AgentState:
+        emit_workflow_event(
+            state,
+            "rewriting",
+            "当前证据不足，正在执行有界问题改写",
+            {"attempt": int(state.get("retry_count", 0)) + 1},
+        )
         if iterative_enabled:
             assessments = state.get("evidence_assessments", [])
             assessment = assessments[-1] if assessments else {}
@@ -500,6 +612,12 @@ def build_graph(service):
         }
 
     def generate_answer(state: AgentState) -> AgentState:
+        emit_workflow_event(
+            state,
+            "generating",
+            "正在基于已通过 Evidence Gate 的证据生成回答",
+            {"evidence_count": len(state.get("evidence", []))},
+        )
         outcome = service.generator.generate(
             state["question"],
             state.get("evidence", []),
@@ -555,6 +673,12 @@ def build_graph(service):
     def citation_guard(state: AgentState) -> AgentState:
         evidence = state.get("evidence", [])
         answer = state.get("answer", "")
+        emit_workflow_event(
+            state,
+            "citation_check",
+            "正在执行 Citation Guard",
+            {"evidence_count": len(evidence)},
+        )
         valid, warnings = validate_citations(answer, evidence)
         trace = list(state.get("agent_trace", []))
         action = "accept"

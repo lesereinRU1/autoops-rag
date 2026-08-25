@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Chunk(BaseModel):
@@ -27,15 +28,150 @@ class SearchHit(BaseModel):
     rerank_score: float | None = None
 
 
-class ToolResult(BaseModel):
-    tool: str
+class SearchManualInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    query: str = Field(
+        min_length=1,
+        max_length=500,
+        description="Manual question, keyword, fault symptom, or technical identifier.",
+    )
+    model: str = Field(
+        default="S7-1200",
+        min_length=1,
+        max_length=100,
+        description="Device model used to filter manual evidence.",
+    )
+    version: str = Field(
+        default="",
+        max_length=100,
+        description="Optional firmware or manual version filter.",
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of evidence hits to return.",
+    )
+
+
+class LookupFaultCodeInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    code: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Exact equipment fault or alarm code, for example 16#80C8.",
+    )
+    model: str = Field(
+        default="S7-1200",
+        min_length=1,
+        max_length=100,
+        description="Device model associated with the fault code.",
+    )
+    version: str = Field(
+        default="",
+        max_length=100,
+        description="Optional firmware or manual version filter.",
+    )
+
+
+class LookupParameterInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(
+        min_length=1,
+        max_length=500,
+        description="Parameter name, table field, or parameter-related query.",
+    )
+    model: str = Field(
+        default="S7-1200",
+        min_length=1,
+        max_length=100,
+        description="Device model associated with the parameter.",
+    )
+    version: str = Field(
+        default="",
+        max_length=100,
+        description="Optional firmware or manual version filter.",
+    )
+    value: float | None = Field(
+        default=None,
+        description="Optional numeric value to compare with a known parameter range.",
+    )
+
+
+class GetDocumentPageInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    document_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="Known document identifier. Provide this or document_name.",
+    )
+    document_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="Known document filename. Provide this or document_id.",
+    )
+    page: int = Field(
+        ge=1,
+        le=100_000,
+        description="One-based page number to retrieve from the allowed document corpus.",
+    )
+
+    @model_validator(mode="after")
+    def require_document_reference(self) -> "GetDocumentPageInput":
+        if not self.document_id and not self.document_name:
+            raise ValueError("document_id or document_name is required")
+        return self
+
+
+class ToolCallTrace(BaseModel):
+    """Serializable, sanitized execution facts for one registry call."""
+
+    tool_name: str = ""
+    tool: str = ""  # Backward-compatible name used by existing trace consumers.
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    started_at: datetime
+    latency_ms: float = 0.0
+    executed: bool = True
     success: bool = False
+    result_count: int = Field(default=0, ge=0)
+    error: str = ""
+
+    @model_validator(mode="after")
+    def synchronize_tool_names(self) -> "ToolCallTrace":
+        name = self.tool_name or self.tool
+        self.tool_name = name
+        self.tool = name
+        return self
+
+
+class ToolResult(BaseModel):
+    # ``tool`` and the text fields remain for compatibility with the existing
+    # SQLiteToolbox and answer generator. New callers should use tool_name/data.
+    tool_name: str = ""
+    tool: str = ""
+    success: bool = False
+    data: Any = Field(default_factory=dict)
+    result_count: int = Field(default=0, ge=0)
     content: str = ""
     evidence: list[SearchHit] = Field(default_factory=list)
     provenance: list[dict[str, Any]] = Field(default_factory=list)
     latency_ms: float = 0.0
     error: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+    call_trace: ToolCallTrace | None = None
+
+    @model_validator(mode="after")
+    def synchronize_tool_names(self) -> "ToolResult":
+        name = self.tool_name or self.tool
+        self.tool_name = name
+        self.tool = name
+        return self
 
 
 class SearchRequest(BaseModel):
@@ -139,6 +275,31 @@ class ChatResponse(BaseModel):
     verified_solution_used: bool = False
     runtime: RuntimeStats
     rag_trace: RagTraceResponse
+
+
+WorkflowEventName = Literal[
+    "request_started",
+    "analyzing",
+    "tool_selected",
+    "retrieving",
+    "reranking",
+    "rewriting",
+    "generating",
+    "citation_check",
+    "completed",
+    "error",
+]
+
+
+class WorkflowEvent(BaseModel):
+    """Stable wire format for the local React workflow event stream."""
+
+    event: WorkflowEventName
+    request_id: str
+    timestamp: datetime
+    stage: WorkflowEventName
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class VerifiedSolutionRequest(BaseModel):

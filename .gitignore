@@ -38,6 +38,11 @@ reports/*.csv
 .cache/
 .tmp/
 
+# React/Vite local dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
 # Runtime logs
 reports/*.log
 reports/*.err.log

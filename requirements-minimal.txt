@@ -10,5 +10,8 @@ pydantic-settings==2.9.1
 python-multipart==0.0.20
 httpx==0.28.1
 numpy==2.2.6
+mcp==2.0.0
+# Keep the MCP HTTP extra compatible with FastAPI 0.115.x; stdio does not use it.
+sse-starlette==3.0.2
 pytest==8.4.1
 

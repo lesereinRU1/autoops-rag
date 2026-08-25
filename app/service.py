@@ -3,13 +3,16 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from datetime import datetime
 
 from app.agent.graph import build_graph
 from app.agent.state import agentic_state_defaults
 from app.agent.memory import MemoryStore
+from app.agent.tool_registry import ToolRegistry
 from app.config import PROJECT_ROOT, get_settings
 from app.concurrency import ReadWriteLock
+from app.document_service import DocumentPageService
 from app.generation.answer_generator import AnswerGenerator
 from app.generation.citation_guard import validate_citations
 from app.ingestion.pipeline import ingest_corpus
@@ -32,6 +35,8 @@ class AutoOpsService:
             for chunk in self._chunk_by_id.values()
             for value in re.findall(r"16#[0-9A-Fa-f]{2,4}", chunk.text)
         }
+        self.document_pages = DocumentPageService(self._chunk_by_id, self.settings.raw_dir)
+        self.tool_registry = ToolRegistry.from_service(self)
         self.graph = build_graph(self)
         self.access = ReadWriteLock()
         self.traces = TraceStore(PROJECT_ROOT / "reports" / "rag_traces.jsonl")
@@ -205,7 +210,12 @@ class AutoOpsService:
             for index, hit in enumerate(evidence, start=1)
         ]
 
-    def chat(self, request: ChatRequest, request_id: str) -> ChatResponse:
+    def chat(
+        self,
+        request: ChatRequest,
+        request_id: str,
+        workflow_event_callback: Callable[[str, str, dict], None] | None = None,
+    ) -> ChatResponse:
         started = time.perf_counter()
         original_question = request.query
         resolved_question, context_turns_used = self.memory.build_followup_query(
@@ -218,6 +228,8 @@ class AutoOpsService:
         graph_input.update(
             agentic_state_defaults(enabled=self.settings.enable_agentic_rag)
         )
+        if workflow_event_callback is not None:
+            graph_input["workflow_event_callback"] = workflow_event_callback
         with self.access.read():
             state = self.graph.invoke(graph_input)
         _, warnings = validate_citations(state["answer"], state.get("evidence", []))
@@ -354,6 +366,7 @@ class AutoOpsService:
 
     def reindex(self, mode: str = "semantic") -> dict:
         with self.access.write():
+            self.tool_registry.close()
             self.retriever.close()
             result = ingest_corpus(mode=mode, rebuild=True)
             self.retriever = HybridRetriever(self.settings)
@@ -363,6 +376,10 @@ class AutoOpsService:
                 for chunk in self._chunk_by_id.values()
                 for value in re.findall(r"16#[0-9A-Fa-f]{2,4}", chunk.text)
             }
+            self.document_pages = DocumentPageService(
+                self._chunk_by_id, self.settings.raw_dir
+            )
+            self.tool_registry = ToolRegistry.from_service(self)
             self.graph = build_graph(self)
             return result
 
@@ -422,4 +439,5 @@ class AutoOpsService:
 
     def close(self) -> None:
         with self.access.write():
+            self.tool_registry.close()
             self.retriever.close()

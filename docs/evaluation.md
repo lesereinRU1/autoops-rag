@@ -5,7 +5,7 @@
 项目保留两套用途不同的数据集：
 
 - 当前 20 题是 LLM smoke test、回归测试和防退化测试，用来确认模型调用、拒答、安全边界、引用、Trace、fallback 等主链路仍能工作。它不属于正式准确率评测，结果不能包装成简历中的正式准确率。
-- 正式评测集位于 `data/eval/formal_questions.jsonl`，目标规模为 60～100 题。该文件初始为空，需要逐题人工整理、标注和复核。
+- 正式评测集位于 `data/eval/formal_questions.jsonl`，当前已有 60 题：development 40 题、test 20 题；其中可回答题 50 道、不可回答题 10 道（含安全题 4 道）。这些题仍需按本文流程持续标注和复核，不能因达到最低题数就视为正式准确率已就绪。
 
 两套数据不得互相冒充，也不得把 smoke test 的检索结果复制成正式题目的 gold。
 
@@ -48,6 +48,8 @@
 - `review_status=reviewed` 的题至少 30 道；
 - 至少存在一道 `test` 题；
 - 所有可回答题均声明为人工预标注 gold，且未发现运行时生成 gold 的标记。
+
+当前数据虽然已经达到 60 题且有 20 题处于 `reviewed` 状态，但可回答题中 `source_scope=official_manual` 的题只有 3 道，占 6%，独立复核数量也未达到 30 题门槛。因此当前 `ready_for_resume_accuracy_claim=false`，现有 ranking 指标不能表述为端到端问答准确率。
 
 题数或复核量不足时可以继续维护 development 集，但不能在简历中写正式准确率指标。
 

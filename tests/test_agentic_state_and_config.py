@@ -36,6 +36,7 @@ def test_agentic_configuration_is_disabled_and_bounded_by_default():
     assert settings.max_tool_calls == 4
     assert settings.max_llm_calls == 2
     assert settings.agent_timeout_seconds == 60.0
+    assert settings.tool_timeout_seconds == 30.0
     assert settings.max_rewrites == 1
 
 

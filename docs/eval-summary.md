@@ -6,7 +6,7 @@
 
 | 项目 | 当前结果 | 含义 |
 |---|---:|---|
-| Pytest | 104 passed | 单元、回归、安全、Agentic shadow、工具、预算和迭代检索测试通过 |
+| Pytest | 115 passed | 单元、回归、安全、Agentic shadow、统一 Tool Registry、工具预算和迭代检索测试通过 |
 | Formal questions | 60 | 50 道可回答题、10 道不可回答题，其中 4 道安全题 |
 | Validation errors | 0 | schema、gold 来源和基本数据规则未发现错误 |
 | Resume accuracy readiness | false | 官方资料占比和独立复核数量尚未达到宣传门槛 |
@@ -93,4 +93,3 @@ Readiness 未通过不是脚本失败：当前官方来源可回答题占比为 
 .\.venv\Scripts\python.exe scripts\eval_agentic_shadow.py
 .\.venv\Scripts\python.exe scripts\eval_iterative_retrieval.py
 ```
-

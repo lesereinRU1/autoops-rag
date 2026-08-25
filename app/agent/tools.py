@@ -73,6 +73,18 @@ def format_alarm(record: dict | None) -> str:
     )
 
 
+def structured_alarm(record: dict[str, Any]) -> dict[str, Any]:
+    value = dict(record)
+    for field in ("causes", "checks"):
+        raw = value.get(field, "")
+        value[field] = (
+            json.loads(raw)
+            if isinstance(raw, str) and raw.startswith("[")
+            else [raw] if raw else []
+        )
+    return value
+
+
 def format_parameter(record: dict | None, value: float | None = None) -> str:
     if not record:
         return "结构化参数库中未找到该参数，将改用手册检索。"
@@ -136,6 +148,8 @@ class SQLiteToolbox:
             return ToolResult(
                 tool="lookup_fault_code",
                 success=False,
+                data={},
+                result_count=0,
                 latency_ms=_elapsed_ms(started),
                 error="sqlite_query_failed",
                 metadata={"found": False, "error_type": type(exc).__name__},
@@ -144,6 +158,8 @@ class SQLiteToolbox:
             return ToolResult(
                 tool="lookup_fault_code",
                 success=True,
+                data={"record": None},
+                result_count=0,
                 content="未找到匹配的故障码记录。",
                 latency_ms=_elapsed_ms(started),
                 metadata={"found": False, "query_code": code},
@@ -152,6 +168,8 @@ class SQLiteToolbox:
         return ToolResult(
             tool="lookup_fault_code",
             success=True,
+            data={"record": structured_alarm(record)},
+            result_count=1,
             content=format_alarm(record),
             provenance=[provenance] if provenance else [],
             latency_ms=_elapsed_ms(started),
@@ -164,7 +182,10 @@ class SQLiteToolbox:
         )
 
     def lookup_parameter(
-        self, query: str, model: str | None = None
+        self,
+        query: str,
+        model: str | None = None,
+        value: float | None = None,
     ) -> ToolResult:
         started = time.perf_counter()
         normalized_model = model or "S7-1200"
@@ -180,6 +201,8 @@ class SQLiteToolbox:
             return ToolResult(
                 tool="lookup_parameter",
                 success=False,
+                data={},
+                result_count=0,
                 latency_ms=_elapsed_ms(started),
                 error="sqlite_query_failed",
                 metadata={"found": False, "error_type": type(exc).__name__},
@@ -188,6 +211,8 @@ class SQLiteToolbox:
             return ToolResult(
                 tool="lookup_parameter",
                 success=True,
+                data={"record": None},
+                result_count=0,
                 content="未找到匹配的参数记录。",
                 latency_ms=_elapsed_ms(started),
                 metadata={"found": False},
@@ -196,7 +221,9 @@ class SQLiteToolbox:
         return ToolResult(
             tool="lookup_parameter",
             success=True,
-            content=format_parameter(record),
+            data={"record": record},
+            result_count=1,
+            content=format_parameter(record, value),
             provenance=[provenance] if provenance else [],
             latency_ms=_elapsed_ms(started),
             metadata={
@@ -235,6 +262,8 @@ class SQLiteToolbox:
                     return ToolResult(
                         tool="lookup_table_rows",
                         success=False,
+                        data={"rows": []},
+                        result_count=0,
                         content="table rows store unavailable：当前SQLite没有表格行数据表。",
                         latency_ms=_elapsed_ms(started),
                         error="table_rows_store_unavailable",
@@ -252,6 +281,8 @@ class SQLiteToolbox:
                     return ToolResult(
                         tool="lookup_table_rows",
                         success=False,
+                        data={"rows": []},
+                        result_count=0,
                         content="table rows store unavailable：表格行数据表结构不受支持。",
                         latency_ms=_elapsed_ms(started),
                         error="table_rows_schema_unsupported",
@@ -288,6 +319,8 @@ class SQLiteToolbox:
             return ToolResult(
                 tool="lookup_table_rows",
                 success=False,
+                data={"rows": []},
+                result_count=0,
                 latency_ms=_elapsed_ms(started),
                 error="sqlite_query_failed",
                 metadata={"available": True, "rows": 0, "error_type": type(exc).__name__},
@@ -314,6 +347,8 @@ class SQLiteToolbox:
         return ToolResult(
             tool="lookup_table_rows",
             success=True,
+            data={"rows": rows},
+            result_count=len(rows),
             content="\n".join(summaries) if summaries else "未找到匹配的表格行。",
             provenance=provenance,
             latency_ms=_elapsed_ms(started),

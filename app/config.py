@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     max_tool_calls: int = 4
     max_llm_calls: int = 2
     agent_timeout_seconds: float = 60.0
+    tool_timeout_seconds: float = 30.0
     max_rewrites: int = 1
 
     @property

@@ -92,9 +92,29 @@
     "applied": false
   },
   "tool_calls": [
-    {"tool": "lookup_verified_solution", "round": 0, "success": false, "latency_ms": 0.4},
-    {"tool": "lookup_fault_code", "round": 0, "success": true, "latency_ms": 0.8},
-    {"tool": "search_manual", "round": 1, "success": true, "latency_ms": 318.4}
+    {
+      "tool_name": "lookup_fault_code",
+      "tool": "lookup_fault_code",
+      "arguments": {"code": "80C8", "model": "S7-1200", "version": ""},
+      "started_at": "2026-07-06T10:30:00.010+08:00",
+      "latency_ms": 0.8,
+      "executed": true,
+      "success": true,
+      "result_count": 1,
+      "error": ""
+    },
+    {
+      "tool_name": "search_manual",
+      "tool": "search_manual",
+      "arguments": {"query": "16#80C8 应优先检查哪些通信条件？", "model": "S7-1200", "version": "", "top_k": 5},
+      "started_at": "2026-07-06T10:30:00.020+08:00",
+      "latency_ms": 318.4,
+      "executed": true,
+      "success": true,
+      "result_count": 5,
+      "error": "",
+      "round": 1
+    }
   ],
   "rounds": 1,
   "budget": {
@@ -104,7 +124,7 @@
     "timeout_seconds": 60.0,
     "max_rewrites": 1,
     "rounds_used": 1,
-    "tool_calls_used": 3,
+      "tool_calls_used": 2,
     "llm_calls_used": 0,
     "rewrites_used": 0,
     "elapsed_ms": 361.2
@@ -162,4 +182,3 @@
 ```
 
 这段文本也是结构示例；`Citation Guard` 实际校验的是来源编号能否映射到本次 evidence。引用有效不自动等于每个事实都正确，仍需 claim-level 评测和人工复核。
-

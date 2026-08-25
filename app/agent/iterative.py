@@ -24,6 +24,12 @@ def _config(config: Any, name: str, default: Any) -> Any:
     return getattr(config, name, default)
 
 
+def _tool_calls_used(state: dict[str, Any]) -> int:
+    return sum(
+        bool(item.get("executed", True)) for item in state.get("tool_calls", [])
+    )
+
+
 def assess_evidence(
     query: str,
     evidence: list[SearchHit],
@@ -161,7 +167,7 @@ def budget_snapshot(
         "timeout_seconds": float(_config(config, "agent_timeout_seconds", 60.0)),
         "max_rewrites": int(_config(config, "max_rewrites", 1)),
         "rounds_used": int(state.get("round_count", 0)),
-        "tool_calls_used": len(state.get("tool_calls", [])),
+        "tool_calls_used": _tool_calls_used(state),
         "llm_calls_used": int(
             state.get("budget", {}).get("llm_calls_used", 0)
             if llm_calls_used is None
@@ -207,7 +213,7 @@ def should_retry_retrieval(
         _config(config, "max_rewrites", 1)
     ):
         return False
-    if len(state.get("tool_calls", [])) >= int(
+    if _tool_calls_used(state) >= int(
         _config(config, "max_tool_calls", 4)
     ):
         return False
@@ -247,7 +253,7 @@ def retry_stop_reason(
         _config(config, "max_rewrites", 1)
     ):
         return "max_rewrites_reached"
-    if len(state.get("tool_calls", [])) >= int(
+    if _tool_calls_used(state) >= int(
         _config(config, "max_tool_calls", 4)
     ):
         return "max_tool_calls_reached"

@@ -8,11 +8,13 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path as PathParam, Query, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -34,10 +36,12 @@ from app.models import (
     SavedFeedbackResponse,
     SavedSolutionResponse,
     VerifiedSolutionRequest,
+    WorkflowEvent,
 )
 from app.service import AutoOpsService
 from app.config import get_settings
 from app.http_guard import SlidingWindowRateLimiter
+from app.tracing import sanitize_trace
 
 
 @asynccontextmanager
@@ -65,7 +69,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+FRONTEND_DIST_DIR = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount(
+    "/demo/assets",
+    StaticFiles(directory=FRONTEND_DIST_DIR / "assets", check_dir=False),
+    name="react-demo-assets",
+)
 SETTINGS = get_settings()
 QUERY_GATE = asyncio.Semaphore(max(1, SETTINGS.max_concurrent_queries))
 RATE_LIMITER = SlidingWindowRateLimiter(
@@ -108,7 +118,8 @@ async def request_guard(request, call_next):
     request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
     request.state.request_id = request_id
     started = time.perf_counter()
-    guarded = request.url.path in {"/api/search", "/api/chat"}
+    stream_path = request.url.path == "/api/chat/stream"
+    guarded = request.url.path in {"/api/search", "/api/chat", "/api/chat/stream"}
     if guarded:
         client = request.client.host if request.client else "unknown"
         allowed, retry_after = RATE_LIMITER.check(client)
@@ -118,17 +129,21 @@ async def request_guard(request, call_next):
                 content={"detail": "请求过于频繁，请稍后再试", "request_id": request_id},
                 headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
             )
-        try:
-            async with QUERY_GATE:
-                response = await asyncio.wait_for(
-                    call_next(request), timeout=SETTINGS.request_timeout_seconds
+        if stream_path:
+            # The stream generator owns the concurrency slot for its full lifetime.
+            response = await call_next(request)
+        else:
+            try:
+                async with QUERY_GATE:
+                    response = await asyncio.wait_for(
+                        call_next(request), timeout=SETTINGS.request_timeout_seconds
+                    )
+            except TimeoutError:
+                return JSONResponse(
+                    status_code=504,
+                    content={"detail": "请求处理超时，已停止等待结果", "request_id": request_id},
+                    headers={"X-Request-ID": request_id},
                 )
-        except TimeoutError:
-            return JSONResponse(
-                status_code=504,
-                content={"detail": "请求处理超时，已停止等待结果", "request_id": request_id},
-                headers={"X-Request-ID": request_id},
-            )
     else:
         response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
@@ -171,6 +186,18 @@ def close_service() -> None:
 @app.get("/", include_in_schema=False)
 def home():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/demo", include_in_schema=False)
+@app.get("/demo/", include_in_schema=False)
+def react_demo():
+    index_file = FRONTEND_DIST_DIR / "index.html"
+    if not index_file.exists():
+        return HTMLResponse(
+            "React Demo 尚未构建。请在 frontend 目录运行 npm install 和 npm run build。",
+            status_code=503,
+        )
+    return FileResponse(index_file)
 
 
 @app.get("/docs", include_in_schema=False)
@@ -301,6 +328,129 @@ def chat(request: ChatRequest, http_request: Request):
         return get_service().chat(request, http_request.state.request_id)
     except Exception as exc:
         raise internal_error("chat", http_request, exc) from exc
+
+
+def _sse_payload(event: WorkflowEvent) -> str:
+    return f"event: {event.event}\ndata: {event.model_dump_json()}\n\n"
+
+
+def _workflow_event(
+    event: str,
+    request_id: str,
+    message: str,
+    data: dict | None = None,
+) -> WorkflowEvent:
+    return WorkflowEvent(
+        event=event,
+        request_id=request_id,
+        timestamp=datetime.now(timezone.utc),
+        stage=event,
+        message=message,
+        data=sanitize_trace(data or {}),
+    )
+
+
+async def _chat_event_stream(request: ChatRequest, request_id: str):
+    queue: asyncio.Queue[tuple[str, str, dict]] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def observe(stage: str, message: str, data: dict) -> None:
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, (stage, message, data))
+        except RuntimeError:
+            # The client may have disconnected while synchronous work was finishing.
+            return
+
+    yield _sse_payload(
+        _workflow_event(
+            "request_started",
+            request_id,
+            "请求已接收，准备执行固定 LangGraph 工作流",
+            {"query": request.query, "model": request.model, "version": request.version},
+        )
+    )
+
+    async def execute_chat() -> ChatResponse:
+        async with QUERY_GATE:
+            call = partial(
+                get_service().chat,
+                request,
+                request_id,
+                workflow_event_callback=observe,
+            )
+            return await asyncio.wait_for(
+                asyncio.to_thread(call),
+                timeout=SETTINGS.request_timeout_seconds,
+            )
+
+    task = asyncio.create_task(execute_chat())
+    try:
+        while not task.done():
+            try:
+                stage, message, data = await asyncio.wait_for(
+                    queue.get(), timeout=0.1
+                )
+            except TimeoutError:
+                continue
+            yield _sse_payload(_workflow_event(stage, request_id, message, data))
+
+        while not queue.empty():
+            stage, message, data = queue.get_nowait()
+            yield _sse_payload(_workflow_event(stage, request_id, message, data))
+
+        response = await task
+        yield _sse_payload(
+            _workflow_event(
+                "completed",
+                request_id,
+                "工作流执行完成",
+                {"response": response.model_dump(mode="json")},
+            )
+        )
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    except TimeoutError:
+        LOGGER.warning("chat_stream timed out request_id=%s", request_id)
+        yield _sse_payload(
+            _workflow_event(
+                "error",
+                request_id,
+                "请求处理超时，服务端已停止等待；底层同步任务可能短暂继续",
+                {"error_type": "request_timeout"},
+            )
+        )
+    except Exception as exc:
+        LOGGER.exception(
+            "chat_stream failed request_id=%s error_type=%s",
+            request_id,
+            type(exc).__name__,
+        )
+        yield _sse_payload(
+            _workflow_event(
+                "error",
+                request_id,
+                "内部服务错误，请使用 request_id 排查",
+                {"error_type": "internal_error"},
+            )
+        )
+
+
+@app.post(
+    "/api/chat/stream",
+    response_class=StreamingResponse,
+    tags=["检索问答"],
+    summary="以 SSE 返回工作流阶段事件和最终回答",
+)
+async def chat_stream(request: ChatRequest, http_request: Request):
+    return StreamingResponse(
+        _chat_event_stream(request, http_request.state.request_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get(

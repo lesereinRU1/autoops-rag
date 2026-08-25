@@ -14,6 +14,7 @@ class AgentState(TypedDict, total=False):
     rewritten_query: str
     evidence: list[SearchHit]
     selected_tool: str
+    execution_tool: str
     tool_result: str
     answer: str
     evidence_sufficient: bool
@@ -41,6 +42,8 @@ class AgentState(TypedDict, total=False):
     rewritten_queries: list[str]
     retrieval_rounds_trace: list[dict[str, Any]]
     agent_started_at: float
+    # Optional local observer used by the SSE adapter; it never affects routing.
+    workflow_event_callback: Any
 
 
 def agentic_state_defaults(*, enabled: bool = False) -> AgentState:

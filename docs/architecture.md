@@ -17,8 +17,10 @@ flowchart TD
     ROUTER --> PLAN["Bounded Query Planner (Shadow)"]
 
     PLAN --> FIXED["Existing Fixed Route"]
-    FIXED --> TOOL["Tool Layer"]
-    TOOL --> SEARCH["Hybrid Retrieval"]
+    FIXED --> REGISTRY["Tool Registry"]
+    REGISTRY --> SQLITE["SQLite Tools"]
+    REGISTRY --> PAGE["Document Page Service"]
+    REGISTRY --> SEARCH["Hybrid Retrieval"]
     SEARCH --> DENSE["BGE + Qdrant"]
     SEARCH --> SPARSE["BM25"]
     DENSE --> FUSION["RRF + Light Rerank"]
@@ -38,7 +40,7 @@ flowchart TD
     INTENT --> TRACE
     ROUTER --> TRACE
     PLAN --> TRACE
-    TOOL --> TRACE
+    REGISTRY --> TRACE
     SEARCH --> TRACE
     GATE --> TRACE
     CITE --> TRACE
@@ -57,9 +59,11 @@ flowchart TD
 
 API 层不决定 Agent 路由，核心编排交给 Service 和 LangGraph。
 
+当前 Web 演示由 FastAPI 直接托管 `static/index.html` 和 `static/docs.html`，技术实现是原生 HTML、CSS 和 JavaScript。页面通过普通 `fetch` 等待完整 JSON 响应后展示回答、Evidence 和 Trace；当前没有 React/TypeScript 前端工程，也没有 SSE 或 token Streaming API。
+
 ## Service 层
 
-`app/service.py` 连接 API、会话上下文、MemoryStore、Retriever、Generator 和 TraceStore。它负责：
+`app/service.py` 连接 API、会话上下文、MemoryStore、ToolRegistry、Retriever、DocumentPageService、Generator 和 TraceStore。它负责：
 
 1. 解析短追问所需的有限会话上下文；
 2. 调用 LangGraph 并汇总最终 state；
@@ -83,7 +87,7 @@ analyze_request
 → END
 ```
 
-Safety/out-of-scope 请求在检索和模型调用前短路。Planner 不会动态添加节点或任意工具名，默认真实边仍是既有固定路径。
+Safety/out-of-scope 请求在检索和模型调用前短路。Planner 不会动态添加节点或任意工具名，默认真实边仍是既有固定路径。故障码和参数分支在 `execute_tool` 节点调用 Registry；`search_manual` 延后到 `retrieve` 节点通过同一 Registry 执行，避免重复 Dense/BM25/RRF/rerank。
 
 ## Hybrid Retrieval
 
@@ -144,7 +148,7 @@ Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止�
 
 ### ToolResult
 
-统一工具输出字段：`tool`、`success`、`content`、`evidence`、`provenance`、`latency_ms`、`error`、`metadata`。只有真实存在的来源字段才能进入 provenance。
+`app/models.py` 定义四个独立 Pydantic 输入模型，以及统一 `ToolResult` 和 `ToolCallTrace`。规范结果字段包括 `tool_name`、`success`、`data`、`result_count`、`error` 和 `latency_ms`；旧的 `tool`、`content`、`evidence`、`provenance`、`metadata` 字段继续兼容。真实固定 Graph 已使用该返回类型。
 
 ### SQLiteToolbox
 
@@ -155,6 +159,10 @@ Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止�
 - `lookup_table_rows`。
 
 查询复用 MemoryStore，用户输入始终作为参数传入，不生成 SQL、不执行写操作。结构化记录没有 `source/page/chunk_id` 时只能作为 metadata 或候选上下文，不能直接包装成最终可引用事实。
+
+当前 Registry 注册 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`。故障码与参数工具复用 `SQLiteToolbox`，检索复用 `HybridRetriever.search_with_trace()`，文档页工具优先复用已处理 chunks。`lookup_table_rows` 仍只在独立测试和 shadow 候选计划中出现，不属于本阶段四个真实注册工具。
+
+对外 `selected_tool` 暂时保留 `lookup_alarm_code` 和 `check_parameter_range` 旧值，以兼容现有 API、会话记录和评测数据；Graph State 的 `execution_tool` 与 ToolCallTrace 使用 `lookup_fault_code` 和 `lookup_parameter` 规范名称。
 
 ## Iterative Retrieval
 
@@ -176,7 +184,7 @@ agent_timeout_seconds = 60
 max_rewrites = 1
 ```
 
-每轮检索和工具/模型调用都会更新 budget snapshot。
+Registry 在每次真实工具执行前强制检查 `max_tool_calls`，被预算拒绝的调用会生成 `executed=false` 的 ToolCallTrace，但不会执行 handler，也不会增加已执行工具数。每个工具还受 `TOOL_TIMEOUT_SECONDS` 约束。现有 agent budget snapshot 复用这些 Trace 统计，并继续判断实验性迭代检索是否还能重试。
 
 ### Stop Reason
 
@@ -193,4 +201,3 @@ max_rewrites = 1
 - `insufficient_evidence`。
 
 这套机制的目标是可解释地停止，而不是让 Agent 持续“再试一次”。
-
