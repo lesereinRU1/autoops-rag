@@ -23,9 +23,14 @@ def test_tool_router_returns_allowlisted_candidates_and_blocks_policy_intents():
         "search_manual",
     ]
     assert candidate_tools("parameter_lookup")[0] == "lookup_parameter"
-    assert candidate_tools("table_lookup")[0] == "lookup_table_rows"
+    assert candidate_tools("table_lookup")[0] == "search_manual"
     assert candidate_tools("safety_risk") == []
     assert candidate_tools("out_of_scope") == []
+    assert candidate_tools(
+        "table_lookup", registered_tools={"search_manual", "dynamic_unknown"}
+    ) == ["search_manual"]
+    assert "lookup_table_rows" not in candidate_tools("table_lookup")
+    assert "lookup_verified_solution" not in candidate_tools("cross_section_procedure")
 
 
 def test_shadow_routing_does_not_change_selected_tool_and_is_visible_in_trace():
@@ -111,17 +116,17 @@ def test_shadow_routing_does_not_change_selected_tool_and_is_visible_in_trace():
 
     assert result["selected_tool"] == "search_manual"
     assert result["intent"]["intent"] == "table_lookup"
-    assert result["candidate_plan"][0] == "lookup_table_rows"
-    assert result["plan"]["steps"][0]["tool"] == "lookup_table_rows"
-    assert result["plan"]["applied"] is False
+    assert result["candidate_plan"][0] == "search_manual"
+    assert result["plan"]["steps"][0]["tool_name"] == "search_manual"
+    assert result["planner_applied"] is False
     router_trace = next(
         item for item in result["agent_trace"] if item["node"] == "tool_router_shadow"
     )
     assert router_trace["applied"] is False
-    assert router_trace["candidate_plan"][0] == "lookup_table_rows"
+    assert router_trace["candidate_plan"][0] == "search_manual"
     planner_trace = next(
         item for item in result["agent_trace"] if item["node"] == "query_planner_shadow"
     )
-    assert planner_trace["configured_enabled"] is True
+    assert planner_trace["configured_enabled"] is False
     assert planner_trace["applied"] is False
     assert planner_trace["plan"] == result["plan"]

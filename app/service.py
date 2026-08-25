@@ -239,7 +239,7 @@ class AutoOpsService:
         graph_input["question"] = resolved_question
         graph_input["original_question"] = original_question
         graph_input.update(
-            agentic_state_defaults(enabled=self.settings.enable_agentic_rag)
+            agentic_state_defaults(enabled=self.settings.enable_agentic_routing)
         )
         if workflow_event_callback is not None:
             graph_input["workflow_event_callback"] = workflow_event_callback
@@ -347,6 +347,11 @@ class AutoOpsService:
             "rewrite_triggered": bool(state.get("rewritten_queries", [])),
             "rewritten_queries": state.get("rewritten_queries", []),
             "retrieval_rounds": state.get("retrieval_rounds_trace", []),
+            "planner_attempted": state.get("planner_attempted", False),
+            "planner_applied": state.get("planner_applied", False),
+            "planner_fallback": state.get("planner_fallback", False),
+            "planner_fallback_reason": state.get("planner_fallback_reason", ""),
+            "planner_round": state.get("planner_round", 0),
         }
         rag_trace = self.traces.append(rag_trace)
         metrics = getattr(self, "metrics", None)

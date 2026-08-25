@@ -2,7 +2,7 @@
 
 ## 架构定位
 
-AutoOps RAG 是基于 LangGraph 的轻量级 Agentic RAG 工业知识库系统。真实问答由固定状态机控制；意图分类器（Intent Classifier）、工具路由器（Tool Router）和有界问题规划器（Bounded Query Planner）只在影子层（shadow layer）生成可观察的候选决策。实验性迭代检索必须显式开启，并受预算约束。
+AutoOps RAG 是基于 LangGraph 的轻量级、受控 Agentic RAG 工业知识库系统。真实问答始终保留固定状态机作为默认路径和 fallback；`ENABLE_AGENTIC_ROUTING=true` 时，现有确定性有界问题规划器（Bounded Query Planner）只对适用 intent 执行严格白名单计划。Planner 不调用 LLM，实验性迭代检索仍须独立开启。
 
 ```text
 用户请求 -> FastAPI -> Service -> LangGraph -> 工具注册中心（Tool Registry）-> RAG/工具
@@ -11,9 +11,9 @@ AutoOps RAG 是基于 LangGraph 的轻量级 Agentic RAG 工业知识库系统�
 
 实现状态必须分开理解：
 
-- **已真实实现**：固定 LangGraph 主流程、Tool Registry 与四个工具、本地 MCP stdio Server、React Demo、工作流级 SSE、SQLite/PostgreSQL 数据访问层（Repository）、Trace 和运行指标。
-- **shadow / experimental**：Intent Classifier、Tool Router、Bounded Query Planner 只记录候选决策；Iterative Retrieval 默认关闭。
-- **尚未实现**：Planner 主动执行、开放式工具循环、远程 HTTP MCP、LLM Token Streaming，以及生产级多实例监控与运维能力。
+- **已真实实现**：固定 LangGraph 主流程、Tool Registry 与四个工具、feature-flagged 受控 Planner、本地 MCP stdio Server、React Demo、工作流级 SSE、SQLite/PostgreSQL Repository、Trace 和运行指标。
+- **默认关闭 / experimental**：Planner/Router 在 flag=false 时只记录候选；flag=true 时仍受 Registry 白名单、统一 budget、timeout、去重和 fallback 限制。Iterative Retrieval 默认关闭。
+- **尚未实现**：LLM Planner、开放式工具循环、Multi-Agent、远程 HTTP MCP、LLM Token Streaming，以及生产级多实例监控与运维能力。
 
 ```mermaid
 flowchart TD
@@ -25,9 +25,11 @@ flowchart TD
     MCPS --> SVC
     SVC --> GRAPH["LangGraph Workflow"]
 
-    GRAPH --> ANALYZE["analyze_request: policy gate + shadow analysis"]
+    GRAPH --> ANALYZE["analyze_request: policy gate + rule-first routing"]
     ANALYZE -->|"safety_risk / out_of_scope"| REFUSE["generate_refusal"]
-    ANALYZE -->|"accepted"| FIXED["execute_tool: fixed route"]
+    ANALYZE -->|"flag off / stable rule"| FIXED["execute_tool: fixed route"]
+    ANALYZE -. "flag on + eligible" .-> PLAN["execute_agent_plan"]
+    PLAN -->|"applied / fallback"| FIXED
     FIXED --> REGISTRY["Tool Registry"]
     REGISTRY --> SQLITE["SQLite Tools"]
     REGISTRY --> PAGE["Document Page Service"]
@@ -107,7 +109,8 @@ API 层不决定 Agent 路由，核心编排交给 Service 和 LangGraph。
 ```text
 analyze_request
 ├─ [安全风险 / 超出范围] → generate_refusal → END
-└─ [允许处理] → execute_tool
+├─ [固定规则 / flag=false] → execute_tool
+└─ [flag=true 且适用] → execute_agent_plan → execute_tool
 → retrieve
 → [证据不足且允许重试] rewrite → retrieve（有界）
 → [证据充分或停止重试] generate_answer
@@ -115,7 +118,7 @@ analyze_request
 → END
 ```
 
-安全风险或超出资料范围的请求由 `analyze_request` 内的策略判断在检索和模型调用前短路。Planner 不会动态添加节点或任意工具名，默认真实边仍是既有固定路径。故障码和参数分支在 `execute_tool` 节点调用 Registry；`search_manual` 延后到 `retrieve` 节点通过同一 Registry 执行，避免重复 Dense/BM25/RRF/Rerank。
+安全风险或超出资料范围的请求由 `analyze_request` 在检索和模型调用前短路。明确故障码、明确参数和普通手册查询继续走稳定规则；表格定位、跨章节流程和版本核对在 flag=true 时可进入 `execute_agent_plan`。计划中的 `search_manual` 若已执行，`retrieve` 会复用相同签名结果，不重复 Dense/BM25/RRF/Rerank；任何 Planner 异常都回到固定路径。
 
 ## Hybrid Retrieval
 
@@ -158,7 +161,7 @@ Trace 覆盖四类信息：
 
 Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止、模型降级和引用异常，不是简单日志拼接。
 
-## Agentic 影子层（Shadow Layer）
+## 受控 Agent 层
 
 ### 意图分类器（Intent Classifier）
 
@@ -166,11 +169,15 @@ Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止�
 
 ### 工具路由器（Tool Router）
 
-根据 intent 生成候选工具序列，工具名必须来自白名单。当前默认只写入 Trace，不改变 `selected_tool`。
+根据 intent 生成候选工具序列，并以当前 Tool Registry 的 `agent_names` 过滤。默认只写入 Trace；开启 routing 后，仍只有 `table_lookup`、`cross_section_procedure`、`version_resolution` 等适用 intent 可以进入 executor。
 
 ### 有界问题规划器（Bounded Query Planner）
 
-生成最多 3 步的结构化计划，包含 `allow_generation`、`need_evidence_gate`、`max_rounds`、`max_tool_calls`、`routing_mode=shadow` 和 `applied=false`。安全和越界 intent 不生成工具步骤。
+生成最多 3 步的严格 Pydantic `Plan`。每个 `PlanStep` 包含 `step_id`、`tool_name`、`arguments`、`reason` 和 `expected_evidence`；Plan 还包含 `intent`、`allow_generation`、`need_evidence_gate`、`max_rounds` 和 `max_tool_calls`。Planner 不调用 LLM，安全和越界 intent 不生成执行步骤。
+
+### 受控执行器（ControlledAgentExecutor）
+
+`app/agent/executor.py` 是唯一的计划执行边界：再次调用 Tool Registry 的严格输入 Schema 校验参数，使用请求级 budget，生成稳定工具签名，缓存 `ToolResult`，并在重复调用时标记 `reused` / `deduplicated`。Registry 一旦返回 `ToolResult`，结果会先发布到请求级恢复缓存，再进行 Trace 后处理；因此后处理异常进入固定 fallback 时仍会复用已有结果。计划校验、未知工具、非法参数、timeout、预算或执行异常都会写入 fallback Trace，而不会把请求变成 500。
 
 ## 工具层（Tool Layer）
 
@@ -192,7 +199,7 @@ Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止�
 
 查询复用 MemoryStore，用户输入始终作为参数传入，不生成 SQL、不执行写操作。结构化记录没有 `source/page/chunk_id` 时只能作为 metadata 或候选上下文，不能直接包装成最终可引用事实。
 
-当前 Tool Registry 注册 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`。故障码与参数工具复用 `SQLiteToolbox`，检索复用 `HybridRetriever.search_with_trace()`，文档页工具优先复用已处理 chunks。`lookup_table_rows` 仍只在独立测试和 shadow 候选计划中出现，不属于四个真实注册工具。
+当前 Tool Registry 注册并允许受控 Planner 执行 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`。故障码与参数工具复用 `SQLiteToolbox`，检索复用 `HybridRetriever.search_with_trace()`，文档页工具优先复用已处理 chunks。`lookup_table_rows` 仍只属于 SQLiteToolbox 的独立能力与测试，不进入 Router 或真实 Planner；`lookup_verified_solution` 仍是固定 Graph 内部逻辑，不是 Registry 工具。
 
 对外 `selected_tool` 暂时保留 `lookup_alarm_code` 和 `check_parameter_range` 旧值，以兼容现有 API、会话记录和评测数据；Graph State 的 `execution_tool` 与 ToolCallTrace 使用 `lookup_fault_code` 和 `lookup_parameter` 规范名称。
 
@@ -203,6 +210,8 @@ Trace 用于区分 retrieval miss、ranking late、证据不足、预算停止�
 ## 运行指标采集器（MetricsCollector）
 
 `app/metrics.py` 在当前进程内聚合 HTTP、RAG、检索、LLM 和工具指标，并通过 `/metrics` 与 `/api/metrics/runtime` 暴露结果。P50/P95/P99 使用最近最多 1000 个样本的滚动窗口，不是全生命周期分位数；多 worker 和独立 MCP 进程的指标不会自动合并。
+
+`tool_call_total` 表示 Tool Registry 统一完成点收到的工具调用尝试次数，包含 unknown tool、参数非法或预算拒绝等 `executed=false` 尝试；它不等于 handler 真实执行次数。只有 `executed=true` 的 `search_manual` 才会增加 `retrieval_request_total`。
 
 ## MCP 与 Web 入口
 
@@ -231,6 +240,8 @@ max_rewrites = 1
 ```
 
 Registry 在每次真实工具执行前强制检查 `max_tool_calls`，被预算拒绝的调用会生成 `executed=false` 的 ToolCallTrace，但不会执行 handler，也不会增加已执行工具数。每个工具还受 `TOOL_TIMEOUT_SECONDS` 约束。现有 agent budget snapshot 复用这些 Trace 统计，并继续判断实验性迭代检索是否还能重试。
+
+`agent_timeout_seconds` 从 Agent 分析开始计时，用于限制受控 Planner 工具的可用 timeout，以及后续检索/Query Rewrite 是否继续；它不包围 LLM 生成、Citation Guard 或整个 HTTP 请求，不是全链路硬 deadline。`ENABLE_AGENTIC_ROUTING=false` 且 Iterative Retrieval 关闭时，新增受控 Agent budget 不会提前截断旧固定流程原有的一次 Query Rewrite。
 
 ### Stop Reason
 

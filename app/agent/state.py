@@ -42,6 +42,16 @@ class AgentState(TypedDict, total=False):
     rewritten_queries: list[str]
     retrieval_rounds_trace: list[dict[str, Any]]
     agent_started_at: float
+    agentic_routing_enabled: bool
+    planner_should_execute: bool
+    planner_attempted: bool
+    planner_applied: bool
+    planner_fallback: bool
+    planner_fallback_reason: str
+    planner_preparation_error: str
+    planner_round: int
+    tool_result_cache: dict[str, Any]
+    tool_call_signatures: list[str]
     # Optional local observer used by the SSE adapter; it never affects routing.
     workflow_event_callback: Any
 
@@ -60,4 +70,14 @@ def agentic_state_defaults(*, enabled: bool = False) -> AgentState:
         "agentic_enabled": enabled,
         "rewritten_queries": [],
         "retrieval_rounds_trace": [],
+        "agentic_routing_enabled": enabled,
+        "planner_should_execute": False,
+        "planner_attempted": False,
+        "planner_applied": False,
+        "planner_fallback": False,
+        "planner_fallback_reason": "",
+        "planner_preparation_error": "",
+        "planner_round": 0,
+        "tool_result_cache": {},
+        "tool_call_signatures": [],
     }

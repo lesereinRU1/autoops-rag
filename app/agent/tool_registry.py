@@ -32,6 +32,7 @@ class RegisteredTool:
     name: str
     input_model: type[BaseModel]
     handler: ToolHandler
+    agent_enabled: bool = False
 
 
 class ToolRegistry:
@@ -64,10 +65,18 @@ class ToolRegistry:
         self._retriever = retriever
         self._document_pages = document_pages
         self._metrics = metrics
-        self.register("search_manual", SearchManualInput, self._search_manual)
-        self.register("lookup_fault_code", LookupFaultCodeInput, self._lookup_fault_code)
-        self.register("lookup_parameter", LookupParameterInput, self._lookup_parameter)
-        self.register("get_document_page", GetDocumentPageInput, self._get_document_page)
+        self._register_agent_tool(
+            "search_manual", SearchManualInput, self._search_manual
+        )
+        self._register_agent_tool(
+            "lookup_fault_code", LookupFaultCodeInput, self._lookup_fault_code
+        )
+        self._register_agent_tool(
+            "lookup_parameter", LookupParameterInput, self._lookup_parameter
+        )
+        self._register_agent_tool(
+            "get_document_page", GetDocumentPageInput, self._get_document_page
+        )
 
     @classmethod
     def from_service(cls, service: Any) -> "ToolRegistry":
@@ -90,6 +99,13 @@ class ToolRegistry:
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._tools))
 
+    @property
+    def agent_names(self) -> tuple[str, ...]:
+        """Return the Registry-owned tools that controlled plans may execute."""
+        return tuple(
+            sorted(name for name, tool in self._tools.items() if tool.agent_enabled)
+        )
+
     def register(
         self,
         name: str,
@@ -99,7 +115,56 @@ class ToolRegistry:
         normalized = name.strip()
         if not normalized:
             raise ValueError("tool name cannot be empty")
-        self._tools[normalized] = RegisteredTool(normalized, input_model, handler)
+        existing = self._tools.get(normalized)
+        self._tools[normalized] = RegisteredTool(
+            normalized,
+            input_model,
+            handler,
+            # Tests/adapters may replace a built-in handler, but dynamically
+            # registering a new name can never expand Agent execution policy.
+            agent_enabled=bool(existing and existing.agent_enabled),
+        )
+
+    def _register_agent_tool(
+        self,
+        name: str,
+        input_model: type[BaseModel],
+        handler: ToolHandler,
+    ) -> None:
+        normalized = name.strip()
+        if not normalized:
+            raise ValueError("tool name cannot be empty")
+        self._tools[normalized] = RegisteredTool(
+            normalized,
+            input_model,
+            handler,
+            agent_enabled=True,
+        )
+
+    def validate_arguments(
+        self,
+        name: str,
+        arguments: BaseModel | dict[str, Any],
+        *,
+        agent_only: bool = False,
+        allow_aliases: bool = False,
+    ) -> tuple[str, BaseModel]:
+        """Resolve a tool and validate arguments without executing or counting it."""
+        requested_name = name.strip()
+        canonical = (
+            self.ALIASES.get(requested_name, requested_name)
+            if allow_aliases
+            else requested_name
+        )
+        definition = self._tools.get(canonical)
+        if definition is None or (agent_only and not definition.agent_enabled):
+            raise KeyError("unknown_tool")
+        payload = (
+            arguments.model_dump(mode="python")
+            if isinstance(arguments, BaseModel)
+            else arguments
+        )
+        return canonical, definition.input_model.model_validate(payload)
 
     def input_model(self, name: str) -> type[BaseModel] | None:
         requested_name = name.strip()
@@ -215,12 +280,11 @@ class ToolRegistry:
             )
 
         try:
-            payload = (
-                arguments.model_dump(mode="python")
-                if isinstance(arguments, BaseModel)
-                else arguments
+            _, validated = self.validate_arguments(
+                canonical,
+                arguments,
+                allow_aliases=False,
             )
-            validated = definition.input_model.model_validate(payload)
         except ValidationError as exc:
             return self._finish(
                 ToolResult(

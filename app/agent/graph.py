@@ -5,6 +5,7 @@ import time
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agent.executor import ControlledAgentExecutor
 from app.agent.state import AgentState
 from app.agent.intent import classify_intent
 from app.agent.iterative import (
@@ -17,7 +18,7 @@ from app.agent.iterative import (
 )
 from app.agent.planner import BoundedQueryPlanner
 from app.agent.tool_registry import ToolRegistry
-from app.agent.tool_router import candidate_tools
+from app.agent.tool_router import candidate_tools, should_execute_planner
 from app.agent.tools import format_verified_solution
 from app.generation.citation_guard import validate_citations
 from app.models import (
@@ -56,7 +57,7 @@ def build_graph(service):
     configured_model = getattr(
         service.settings, "llm_primary_model", service.settings.llm_model
     )
-    shadow_planner = BoundedQueryPlanner(
+    planner = BoundedQueryPlanner(
         max_agent_rounds=getattr(service.settings, "max_agent_rounds", 2),
         max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
     )
@@ -66,6 +67,14 @@ def build_graph(service):
     registry = getattr(service, "tool_registry", None)
     if registry is None and hasattr(service, "memory") and hasattr(service, "retriever"):
         registry = ToolRegistry.from_service(service)
+    agent_executor = (
+        ControlledAgentExecutor(registry, service.settings)
+        if registry is not None and hasattr(registry, "validate_arguments")
+        else None
+    )
+    routing_enabled = bool(
+        getattr(service.settings, "enable_agentic_routing", False)
+    )
 
     def emit_workflow_event(
         state: AgentState,
@@ -99,12 +108,6 @@ def build_graph(service):
             model=state.get("model", "S7-1200"),
             version=state.get("version", ""),
         )
-        candidate_plan = candidate_tools(intent_result["intent"])
-        structured_plan = shadow_planner.build_plan(
-            query=policy_question,
-            intent=intent_result["intent"],
-            candidate_tools=candidate_plan,
-        )
         alarm = extract_alarm(question)
         parameter_words = (
             "范围", "上下限", "参数", "端口", "波特率", "unit id", "寄存器地址",
@@ -123,6 +126,38 @@ def build_graph(service):
             "lookup_fault_code": "lookup_alarm_code",
             "lookup_parameter": "check_parameter_range",
         }.get(tool, tool)
+        available_agent_tools = getattr(registry, "agent_names", None)
+        candidate_plan = candidate_tools(
+            intent_result["intent"],
+            registered_tools=available_agent_tools,
+        )
+        planner_eligible = should_execute_planner(
+            intent_result["intent"],
+            fixed_tool=tool,
+            has_policy_refusal=bool(refusal_reason),
+        )
+        planner_should_execute = routing_enabled and planner_eligible
+        known_document_pages = [
+            {
+                "document_id": hit.chunk.doc_id,
+                "document_name": hit.chunk.doc_name,
+                "page": hit.chunk.page,
+            }
+            for hit in state.get("evidence", [])
+        ]
+        planner_preparation_error = ""
+        try:
+            structured_plan = planner.build_plan(
+                query=policy_question,
+                intent=intent_result["intent"],
+                candidate_tools=candidate_plan,
+                model=state.get("model", "S7-1200"),
+                version=state.get("version", ""),
+                known_document_pages=known_document_pages,
+            ).model_dump(mode="json")
+        except Exception as exc:
+            structured_plan = {}
+            planner_preparation_error = f"planner_build_failed:{type(exc).__name__}"
 
         kg = service.memory.expand_knowledge_graph(question)
         trace = [
@@ -145,8 +180,12 @@ def build_graph(service):
                 **intent_result,
             },
             {
-                "node": "tool_router_shadow",
-                "shadow": True,
+                "node": (
+                    "tool_router_controlled"
+                    if planner_should_execute
+                    else "tool_router_shadow"
+                ),
+                "shadow": not planner_should_execute,
                 "configured_enabled": bool(
                     getattr(service.settings, "enable_agentic_routing", False)
                 ),
@@ -155,13 +194,18 @@ def build_graph(service):
                 "candidate_plan": candidate_plan,
             },
             {
-                "node": "query_planner_shadow",
-                "shadow": True,
+                "node": (
+                    "query_planner_candidate"
+                    if planner_should_execute
+                    else "query_planner_shadow"
+                ),
+                "shadow": not planner_should_execute,
                 "configured_enabled": bool(
-                    getattr(service.settings, "enable_agentic_planner", False)
+                    getattr(service.settings, "enable_agentic_routing", False)
                 ),
                 "applied": False,
                 "plan": structured_plan,
+                "preparation_error": planner_preparation_error,
             },
             {
                 "node": "knowledge_graph",
@@ -222,10 +266,140 @@ def build_graph(service):
             "agent_started_at": agent_started_at,
             "stop_reason": initial_stop_reason,
             "budget": budget_snapshot(initial_tracking, service.settings),
+            "agentic_routing_enabled": routing_enabled,
+            "planner_should_execute": planner_should_execute,
+            "planner_attempted": False,
+            "planner_applied": False,
+            "planner_fallback": False,
+            "planner_fallback_reason": "",
+            "planner_preparation_error": planner_preparation_error,
+            "planner_round": 0,
+            "tool_result_cache": {},
+            "tool_call_signatures": [],
         }
 
     def after_policy_gate(state: AgentState) -> str:
-        return "generate_refusal" if state.get("refusal_reason") else "execute"
+        if state.get("refusal_reason"):
+            return "generate_refusal"
+        if state.get("planner_should_execute"):
+            return "execute_agent_plan"
+        return "execute"
+
+    def execute_agent_plan(state: AgentState) -> AgentState:
+        trace = list(state.get("agent_trace", []))
+        fallback_reason = state.get("planner_preparation_error", "")
+        outcome = None
+        recovery_tool_calls = list(state.get("tool_calls", []))
+        recovery_cache = dict(state.get("tool_result_cache", {}))
+        recovery_signatures = list(state.get("tool_call_signatures", []))
+        execution_state = {
+            **state,
+            "tool_calls": recovery_tool_calls,
+            "tool_result_cache": recovery_cache,
+            "tool_call_signatures": recovery_signatures,
+        }
+        if not fallback_reason and agent_executor is None:
+            fallback_reason = "executor_unavailable"
+        if not fallback_reason:
+            try:
+                outcome = agent_executor.execute_plan(
+                    state.get("plan", {}), execution_state
+                )
+                fallback_reason = outcome.fallback_reason
+            except Exception as exc:
+                fallback_reason = f"executor_exception:{type(exc).__name__}"
+                # ``call_or_reuse`` publishes each completed Registry result to
+                # this shared cache before executor post-processing. Recover its
+                # actual trace and signature so fallback keeps both exactly-once
+                # execution and accurate request-level budget accounting.
+                recorded_attempts = {
+                    (str(item.get("tool_name", "")), str(item.get("started_at", "")))
+                    for item in recovery_tool_calls
+                    if isinstance(item, dict)
+                }
+                for signature, cached_result in recovery_cache.items():
+                    cached_trace = getattr(cached_result, "call_trace", None)
+                    if cached_trace is not None and cached_trace.executed:
+                        try:
+                            trace_payload = cached_trace.model_dump(mode="json")
+                            identity = (
+                                str(trace_payload.get("tool_name", "")),
+                                str(trace_payload.get("started_at", "")),
+                            )
+                            if identity not in recorded_attempts:
+                                recovery_tool_calls.append(trace_payload)
+                                recorded_attempts.add(identity)
+                        except Exception:
+                            # Recovery bookkeeping is best-effort; the cached
+                            # ToolResult still prevents a second Registry call.
+                            pass
+                    if signature not in recovery_signatures:
+                        recovery_signatures.append(signature)
+
+        applied = bool(outcome and outcome.applied)
+        fallback = bool(fallback_reason or (outcome and outcome.fallback))
+        planner_round = outcome.planner_round if outcome else 1
+        tool_calls = (
+            outcome.tool_calls if outcome else recovery_tool_calls
+        )
+        cache = (
+            outcome.tool_result_cache
+            if outcome
+            else recovery_cache
+        )
+        signatures = (
+            outcome.tool_call_signatures
+            if outcome
+            else recovery_signatures
+        )
+        evidence = outcome.evidence if outcome else list(state.get("evidence", []))
+        result_parts = outcome.result_parts if outcome else []
+        trace.append(
+            {
+                "node": "controlled_planner_execution",
+                "planner_attempted": True,
+                "planner_applied": applied,
+                "planner_fallback": fallback,
+                "fallback_reason": fallback_reason,
+                "planner_round": planner_round,
+                "input_summary": {
+                    "intent": state.get("intent", {}).get("intent", ""),
+                    "query_length": len(state.get("original_question", "")),
+                    "model": state.get("model", "S7-1200"),
+                    "has_version": bool(state.get("version", "")),
+                },
+                "candidate_plan": state.get("plan", {}),
+                "applied_plan": state.get("plan", {}) if applied else {},
+                "budget_snapshot": (
+                    outcome.budget
+                    if outcome
+                    else budget_snapshot(
+                        {**state, "planner_round": planner_round}, service.settings
+                    )
+                ),
+            }
+        )
+        next_state = {
+            **state,
+            "planner_round": planner_round,
+            "tool_calls": tool_calls,
+            "tool_result_cache": cache,
+            "retry_count": state.get("retry_count", 0),
+        }
+        return {
+            "planner_attempted": True,
+            "planner_applied": applied,
+            "planner_fallback": fallback,
+            "planner_fallback_reason": fallback_reason,
+            "planner_round": planner_round,
+            "agent_trace": trace,
+            "tool_calls": tool_calls,
+            "tool_result_cache": cache,
+            "tool_call_signatures": signatures,
+            "evidence": evidence,
+            "tool_result": "\n\n".join(result_parts),
+            "budget": budget_snapshot(next_state, service.settings),
+        }
 
     def generate_refusal(state: AgentState) -> AgentState:
         reason = state.get("refusal_reason", "现有资料不足")
@@ -272,6 +446,8 @@ def build_graph(service):
         trace = list(state.get("agent_trace", []))
         tool_calls = list(state.get("tool_calls", []))
         result_parts: list[str] = []
+        if state.get("tool_result"):
+            result_parts.append(state["tool_result"])
 
         verified_started = time.perf_counter()
         verified = service.memory.find_verified_solution(original_question, model)
@@ -301,32 +477,39 @@ def build_graph(service):
             )
 
         result: ToolResult | None = None
-        if registry is not None and tool == "lookup_fault_code":
-            result = registry.execute(
-                tool,
-                LookupFaultCodeInput(
+        structured_arguments = None
+        if tool == "lookup_fault_code":
+            structured_arguments = LookupFaultCodeInput(
                     code=extract_alarm(original_question) or original_question,
                     model=model,
                     version=state.get("version", ""),
-                ),
-                tool_calls=tool_calls,
-                max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
             )
-        elif registry is not None and tool == "lookup_parameter":
+        elif tool == "lookup_parameter":
             value_match = VALUE_PATTERN.search(
                 original_question.replace("S7-1200", "")
             )
-            result = registry.execute(
-                tool,
-                LookupParameterInput(
+            structured_arguments = LookupParameterInput(
                     name=original_question,
                     model=model,
                     version=state.get("version", ""),
                     value=float(value_match.group(1)) if value_match else None,
-                ),
-                tool_calls=tool_calls,
-                max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
             )
+        cache = dict(state.get("tool_result_cache", {}))
+        if registry is not None and structured_arguments is not None:
+            if agent_executor is not None and state.get("planner_attempted"):
+                result, cache, _ = agent_executor.call_or_reuse(
+                    tool,
+                    structured_arguments,
+                    {**state, "tool_calls": tool_calls},
+                    planner_round=max(int(state.get("planner_round", 0)), 1),
+                )
+            else:
+                result = registry.execute(
+                    tool,
+                    structured_arguments,
+                    tool_calls=tool_calls,
+                    max_tool_calls=getattr(service.settings, "max_tool_calls", 4),
+                )
         if result is not None:
             if result.content:
                 result_parts.append(result.content)
@@ -356,6 +539,7 @@ def build_graph(service):
                 list(verified.get("source_chunk_ids", [])) if verified else []
             ),
             "tool_calls": tool_calls,
+            "tool_result_cache": cache,
             "stop_reason": stop_reason,
             "budget": budget_snapshot(next_state, service.settings),
         }
@@ -381,12 +565,32 @@ def build_graph(service):
         search_query = " ".join([query, *kg_terms]).strip()
         expansion_terms = expand_query(search_query)[1] if service.settings.enable_query_expansion else []
         existing_tool_calls = list(state.get("tool_calls", []))
+        cache = dict(state.get("tool_result_cache", {}))
         if registry is None:
             search_result = ToolResult(
                 tool_name="search_manual",
                 success=False,
                 error="tool_registry_unavailable",
             )
+        elif agent_executor is not None and state.get("planner_attempted"):
+            try:
+                search_result, cache, _ = agent_executor.call_or_reuse(
+                    "search_manual",
+                    SearchManualInput(
+                        query=search_query,
+                        model=model,
+                        version=version,
+                        top_k=5,
+                    ),
+                    {**state, "tool_calls": existing_tool_calls},
+                    planner_round=max(int(state.get("planner_round", 0)), 1),
+                )
+            except Exception:
+                search_result = ToolResult(
+                    tool_name="search_manual",
+                    success=False,
+                    error="tool_execution_failed",
+                )
         else:
             search_result = registry.execute(
                 "search_manual",
@@ -427,7 +631,8 @@ def build_graph(service):
         previous_evidence = list(state.get("evidence", []))
         evidence = (
             merge_evidence_rounds(previous_evidence, new_evidence)
-            if iterative_enabled and previous_evidence
+            if (iterative_enabled or state.get("planner_attempted"))
+            and previous_evidence
             else new_evidence
         )
         retrieval_trace["final_evidence"] = service.retriever._trace_hits(evidence)
@@ -465,6 +670,7 @@ def build_graph(service):
             "tool_timeout": "tool_timeout",
             "tool_execution_failed": "tool_error",
             "tool_registry_unavailable": "tool_error",
+            "agent_timeout": "timeout_reached",
         }.get(search_result.error, "")
         if tool_stop_reason:
             stop_reason = tool_stop_reason
@@ -478,10 +684,31 @@ def build_graph(service):
                 service.settings,
                 assessment=assessment,
             )
-        elif state.get("retry_count", 0) >= 1:
-            stop_reason = "insufficient_evidence"
+        elif not state.get("planner_attempted"):
+            # Preserve the pre-Stage-G fixed workflow: with iterative retrieval
+            # disabled it performs at most one legacy rewrite, independently of
+            # the new controlled-Agent budget fields.
+            stop_reason = (
+                "insufficient_evidence"
+                if int(state.get("retry_count", 0)) >= 1
+                else ""
+            )
+        elif state.get("retry_count", 0) >= int(
+            getattr(service.settings, "max_rewrites", 1)
+        ):
+            stop_reason = "max_rewrites_reached"
         else:
-            stop_reason = ""
+            current_budget = budget_snapshot(decision_state, service.settings)
+            if current_budget["remaining_ms"] <= 0:
+                stop_reason = "timeout_reached"
+            elif current_budget["remaining_rounds"] <= 0:
+                stop_reason = "max_rounds_reached"
+            elif current_budget["remaining_tool_calls"] <= 0:
+                stop_reason = "max_tool_calls_reached"
+            elif current_budget["remaining_rewrites"] <= 0:
+                stop_reason = "max_rewrites_reached"
+            else:
+                stop_reason = ""
         assessment = {
             **assessment,
             "retry_allowed": retry_allowed,
@@ -543,6 +770,7 @@ def build_graph(service):
             "retrieval_trace": retrieval_trace,
             "round_count": next_round,
             "tool_calls": tool_calls,
+            "tool_result_cache": cache,
             "evidence_assessments": assessments,
             "retrieval_rounds_trace": retrieval_rounds_trace,
             "stop_reason": stop_reason,
@@ -552,8 +780,11 @@ def build_graph(service):
     def after_evidence_gate(state: AgentState) -> str:
         if state.get("stop_reason") in {
             "max_tool_calls_reached",
+            "max_rounds_reached",
+            "max_rewrites_reached",
             "tool_timeout",
             "tool_error",
+            "timeout_reached",
         }:
             return "generate_answer"
         if iterative_enabled:
@@ -566,7 +797,14 @@ def build_graph(service):
                 if should_retry_retrieval(state, assessment, service.settings)
                 else "generate_answer"
             )
-        if state.get("evidence_sufficient") or state.get("retry_count", 0) >= 1:
+        legacy_rewrite_limit = (
+            int(getattr(service.settings, "max_rewrites", 1))
+            if state.get("planner_attempted")
+            else 1
+        )
+        if state.get("evidence_sufficient") or state.get(
+            "retry_count", 0
+        ) >= legacy_rewrite_limit:
             return "generate_answer"
         return "rewrite"
 
@@ -721,6 +959,7 @@ def build_graph(service):
     graph = StateGraph(AgentState)
     graph.add_node("analyze_request", analyze_request)
     graph.add_node("execute_tool", execute_tool)
+    graph.add_node("execute_agent_plan", execute_agent_plan)
     graph.add_node("retrieve", retrieve)
     graph.add_node("rewrite", rewrite)
     graph.add_node("generate_answer", generate_answer)
@@ -730,8 +969,13 @@ def build_graph(service):
     graph.add_conditional_edges(
         "analyze_request",
         after_policy_gate,
-        {"execute": "execute_tool", "generate_refusal": "generate_refusal"},
+        {
+            "execute": "execute_tool",
+            "execute_agent_plan": "execute_agent_plan",
+            "generate_refusal": "generate_refusal",
+        },
     )
+    graph.add_edge("execute_agent_plan", "execute_tool")
     graph.add_edge("execute_tool", "retrieve")
     graph.add_conditional_edges(
         "retrieve",

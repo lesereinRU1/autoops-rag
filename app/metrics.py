@@ -148,6 +148,13 @@ class MetricsCollector:
         self._evidence_insufficient_total = 0
         self._citation_guard_failure_total = 0
         self._fallback_total = 0
+        self._planner_attempt_total = 0
+        self._planner_applied_total = 0
+        self._planner_fallback_total = 0
+        self._planner_error_total = 0
+        self._agent_round_total = 0
+        self._tool_reuse_total = 0
+        self._budget_exhausted_total = 0
         self._retrieval_request_total = 0
         self._retrieved_candidates = _RollingSamples(self.latency_window_size)
         self._final_evidence = _RollingSamples(self.latency_window_size)
@@ -233,7 +240,12 @@ class MetricsCollector:
         self._error_events[category] += 1
 
     def observe_tool_result(self, result: Any, *, source: str = "workflow") -> None:
-        """Observe one whitelisted Registry result at its unified completion point."""
+        """Observe one Registry call attempt at its unified completion point.
+
+        ``tool_call_total`` includes rejected attempts whose trace has
+        ``executed=false``. Retrieval counters remain limited to handlers that
+        actually executed ``search_manual``.
+        """
         tool_name = str(
             getattr(result, "tool_name", "") or getattr(result, "tool", "")
         )
@@ -335,6 +347,42 @@ class MetricsCollector:
         if not isinstance(attempted_models, list):
             attempted_models = []
         generation_mode = str(generation_usage.get("mode", "") or "")
+        planner_attempted = bool(trace.get("planner_attempted", False))
+        planner_applied = bool(trace.get("planner_applied", False))
+        planner_fallback = bool(trace.get("planner_fallback", False))
+        planner_fallback_reason = str(
+            trace.get("planner_fallback_reason", "") or ""
+        )
+        planner_round = _non_negative_int(trace.get("planner_round"))
+        observed_tool_calls = trace.get("tool_calls", [])
+        if not isinstance(observed_tool_calls, list):
+            observed_tool_calls = []
+        tool_reuse_count = sum(
+            bool(item.get("reused", False))
+            for item in observed_tool_calls
+            if isinstance(item, dict)
+        )
+        planner_error = planner_fallback_reason.startswith(
+            ("planner_build_failed", "executor_exception")
+        ) or planner_fallback_reason in {
+            "plan_validation_failure",
+            "unknown_tool",
+            "invalid_arguments",
+            "invalid_document_page",
+            "tool_timeout",
+            "executor_tool_error",
+            "executor_unavailable",
+        }
+        budget_exhausted = planner_fallback_reason in {
+            "max_tool_calls_reached",
+            "max_rounds_reached",
+            "agent_timeout",
+        } or stop_reason in {
+            "max_tool_calls_reached",
+            "max_rounds_reached",
+            "max_rewrites_reached",
+            "timeout_reached",
+        }
 
         with self._lock:
             self._rag_request_total += 1
@@ -350,6 +398,18 @@ class MetricsCollector:
                 self._record_error_unlocked("citation_error")
             if fallback_reason:
                 self._fallback_total += 1
+            if planner_attempted:
+                self._planner_attempt_total += 1
+            if planner_applied:
+                self._planner_applied_total += 1
+            if planner_fallback:
+                self._planner_fallback_total += 1
+            if planner_error:
+                self._planner_error_total += 1
+            self._agent_round_total += planner_round
+            self._tool_reuse_total += tool_reuse_count
+            if budget_exhausted:
+                self._budget_exhausted_total += 1
 
             self._llm_call_total += external_calls
             if external_calls:
@@ -428,6 +488,15 @@ class MetricsCollector:
                         "retrieval_request_total": self._retrieval_request_total,
                         "retrieved_candidate_count": self._retrieved_candidates.snapshot(),
                         "final_evidence_count": self._final_evidence.snapshot(),
+                    },
+                    "agent": {
+                        "planner_attempt_total": self._planner_attempt_total,
+                        "planner_applied_total": self._planner_applied_total,
+                        "planner_fallback_total": self._planner_fallback_total,
+                        "planner_error_total": self._planner_error_total,
+                        "agent_round_total": self._agent_round_total,
+                        "tool_reuse_total": self._tool_reuse_total,
+                        "budget_exhausted_total": self._budget_exhausted_total,
                     },
                 },
                 "llm": {
@@ -537,6 +606,41 @@ class MetricsCollector:
                 self._sample("autoops_fallback_total", rag["fallback_total"]),
                 "# TYPE autoops_fallback_rate gauge",
                 self._sample("autoops_fallback_rate", rag["fallback_rate"] or 0.0),
+                "# TYPE autoops_planner_attempt_total counter",
+                self._sample(
+                    "autoops_planner_attempt_total",
+                    rag["agent"]["planner_attempt_total"],
+                ),
+                "# TYPE autoops_planner_applied_total counter",
+                self._sample(
+                    "autoops_planner_applied_total",
+                    rag["agent"]["planner_applied_total"],
+                ),
+                "# TYPE autoops_planner_fallback_total counter",
+                self._sample(
+                    "autoops_planner_fallback_total",
+                    rag["agent"]["planner_fallback_total"],
+                ),
+                "# TYPE autoops_planner_error_total counter",
+                self._sample(
+                    "autoops_planner_error_total",
+                    rag["agent"]["planner_error_total"],
+                ),
+                "# TYPE autoops_agent_round_total counter",
+                self._sample(
+                    "autoops_agent_round_total",
+                    rag["agent"]["agent_round_total"],
+                ),
+                "# TYPE autoops_tool_reuse_total counter",
+                self._sample(
+                    "autoops_tool_reuse_total",
+                    rag["agent"]["tool_reuse_total"],
+                ),
+                "# TYPE autoops_budget_exhausted_total counter",
+                self._sample(
+                    "autoops_budget_exhausted_total",
+                    rag["agent"]["budget_exhausted_total"],
+                ),
                 "# TYPE autoops_retrieval_request_total counter",
                 self._sample(
                     "autoops_retrieval_request_total",
@@ -575,6 +679,7 @@ class MetricsCollector:
                     "autoops_average_tokens_per_observed_request",
                     llm["average_tokens_per_observed_request"] or 0.0,
                 ),
+                "# HELP autoops_tool_calls_total Tool Registry call attempts, including rejected attempts that did not execute a handler.",
                 "# TYPE autoops_tool_calls_total counter",
                 self._sample("autoops_tool_calls_total", tools["tool_call_total"]),
                 "# TYPE autoops_tool_successes_total counter",

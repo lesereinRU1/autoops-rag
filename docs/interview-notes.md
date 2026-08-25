@@ -23,9 +23,9 @@
 
 可以用阶段 6/7 的真实实验讲：旧 gate 因 `0`、`PLC` 触发两次无效 Rewrite；加入标识符过滤后，before/after trigger rate 从 5.71% 降为 0，并保持安全与循环回归为 0。重点是“减少误触发”，不是夸成“召回大幅提升”。
 
-### Shadow Planner
+### 受控 Planner
 
-解释为什么先记录 `routing_mode=shadow`、`applied=false`：验证分类、工具序列和预算约束，不把未经验证的策略直接放进稳定路径。
+解释默认为什么保持固定流程，以及 `ENABLE_AGENTIC_ROUTING=true` 后如何只让确定性 Planner 在 Registry 白名单、统一预算、timeout、去重和 fallback 下执行适用请求。不要把它说成 LLM Planner 或自主 Agent。
 
 ### Provenance
 
@@ -33,9 +33,9 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 
 ## 不要夸大的地方
 
-- 不要把 24 个 shadow case 的 100% 当问答准确率；
+- 不要把 shadow Plan Valid 100% 当问答准确率；阶段 G 后旧表格工具预期已成为历史口径；
 - 不要把 ranking Recall@5 当答案正确率；
-- 不要声称 Planner 已接管真实路由；
+- 不要声称 Planner 接管所有请求；它只在 feature flag 开启后处理适用 intent；
 - 不要声称 iterative retrieval 已证明正向召回收益；
 - 不要声称接入或控制真实 PLC；
 - 不要声称企业生产落地或减少停机时间；
@@ -44,9 +44,9 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 
 ## 推荐说法
 
-- “这是基于 LangGraph 的轻量级 Agentic RAG，Agentic 层当前以 shadow 和 gated experiment 为主。”
+- “这是基于 LangGraph 的受控 Agentic RAG，默认走固定流程，开启 feature flag 后只执行确定性白名单计划。”
 - “在 35 道 development ranking-only 题上，Strict Recall@5 为 1.0，MRR@5 为 0.9343。”
-- “Shadow eval 的 100% 表示规则计划符合 overlay 预期，不代表最终问答准确率。”
+- “Shadow Plan Valid 的 100% 只表示结构、预算和循环约束有效，不代表最终问答准确率。”
 - “Evidence Gate 和 Citation Guard 分别约束生成前证据与生成后引用。”
 - “迭代检索默认关闭，开启时有轮数、工具、LLM、Rewrite 和超时预算。”
 - “结构化工具没有可靠 provenance 时不能直接作为最终事实。”
@@ -56,8 +56,8 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 
 | 避免说法 | 原因 | 替代说法 |
 |---|---|---|
-| 问答准确率 100% | 混淆 shadow 与端到端问答 | Shadow plan valid rate 在 24 个 overlay case 上为 100% |
-| 完全自主 Agent | Router/Planner 未接管真实路由 | 轻量级、受约束的 Agentic RAG |
+| 问答准确率 100% | 混淆 shadow 与端到端问答 | Shadow plan valid rate 只衡量结构与预算约束 |
+| 完全自主 Agent | Planner 不是 LLM Planner，且只处理适用请求 | feature-flagged、受约束的 Agentic RAG |
 | 生产级系统 | 无真实生产部署和业务指标 | 完成可复现的本地工程原型与内部评测 |
 | 自动诊断 PLC 故障 | 系统只检索资料，不控制设备 | 提供带手册证据的故障辅助分析 |
 | Citation 保证答案正确 | 只验证引用映射 | Citation Guard 防止引用本次 evidence 之外的来源 |
@@ -68,7 +68,7 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 1. 先讲工业手册的表格、精确术语和安全边界；
 2. 再讲文档解析和 Hybrid Retrieval；
 3. 用 Evidence Gate / Citation Guard 解释为什么不直接交给 LLM；
-4. 用 shadow Planner 和 budget 解释“轻量级 Agentic”；
+4. 用受控 Planner、Registry 白名单、去重和 budget 解释“轻量级 Agentic”；
 5. 最后展示 Trace 和三套互相隔离的评测；
 6. 主动交代数据规模、readiness 和未完成项。
 
@@ -77,7 +77,7 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 ```text
 Question
   → Safety Gate
-  → Intent / Router / Planner (shadow)
+  → Intent / Rule-first Router / Controlled Planner（可选）
   → Structured Tool + Hybrid Retrieval
   → Evidence Gate
   → bounded Rewrite（可选）
@@ -85,4 +85,3 @@ Question
   → Citation Guard
   → Answer + Trace
 ```
-

@@ -4,13 +4,13 @@
 
 当前应用与 API 版本为 `4.1.0`。
 
-它不是完全自主 Agent：意图分类器（Intent Classifier）、工具路由器（Tool Router）和有界问题规划器（Bounded Query Planner）当前主要以影子模式（shadow）记录候选决策；证据驱动的迭代检索（Evidence-driven Iterative Retrieval）属于实验能力，受开关和预算约束且默认关闭。真实主流程仍由固定、可审计的 LangGraph 状态机控制。
+它不是完全自主 Agent：默认仍执行固定、可审计的 LangGraph 工作流；显式设置 `ENABLE_AGENTIC_ROUTING=true` 后，现有确定性有界问题规划器（Bounded Query Planner）只对表格定位、跨章节流程和版本核对等适用请求执行受控计划。它不调用 LLM 做规划，不能创建任意工具，任何校验、预算、超时或工具异常都会回退固定流程。
 
 当前实现边界：
 
-- **已真实实现**：FastAPI API、固定 LangGraph 主流程、工具注册中心（Tool Registry）、四个正式工具、本地 MCP stdio Server、React + TypeScript Demo、工作流级 SSE、运行数据访问层（Repository）以及轻量运行指标。
-- **shadow / experimental**：Intent Classifier、Tool Router 和 Bounded Query Planner 只把候选决策写入 Trace；Iterative Retrieval 必须显式开启并受预算约束。
-- **尚未实现**：Planner 主动执行、开放式工具循环、远程 HTTP MCP、LLM Token Streaming，以及生产级多实例监控与运维能力。
+- **已真实实现**：FastAPI API、固定 LangGraph 主流程、工具注册中心（Tool Registry）、四个正式工具、feature-flagged 受控 Planner、本地 MCP stdio Server、React + TypeScript Demo、工作流级 SSE、运行数据访问层（Repository）以及轻量运行指标。
+- **默认关闭 / experimental**：`ENABLE_AGENTIC_ROUTING=false` 时 Planner/Router 只记录候选决策；开启后也只允许确定性计划、Registry 白名单、统一 budget、timeout、去重和 fallback。Iterative Retrieval 仍须单独显式开启。
+- **尚未实现**：LLM Planner、开放式工具循环、Multi-Agent、远程 HTTP MCP、LLM Token Streaming，以及生产级多实例监控与运维能力。
 
 ## 项目简介
 
@@ -41,7 +41,7 @@ Python 3.11、FastAPI、LangGraph、MCP Python SDK、Qdrant、BGE/FastEmbed、BM
 | 引用校验 | Citation Guard 校验回答引用是否来自本次证据，失败时降级为本地证据摘要 |
 | 工具封装 | LangGraph 固定路由通过 Tool Registry 执行 `search_manual`、`lookup_fault_code`、`lookup_parameter` 和 `get_document_page`，统一校验参数、结果、Trace、预算与超时 |
 | 本地 MCP | stdio MCP Server 暴露同一组四个工具，直接复用 Tool Registry 和 Service，不经过 FastAPI HTTP 接口 |
-| Agentic Shadow | 规则式 Intent Classifier、Tool Router 和 Bounded Planner 生成候选计划，仅写入 Trace |
+| 受控 Agent | 默认仅记录候选计划；开启 `ENABLE_AGENTIC_ROUTING` 后，确定性 Planner 可在 Registry 白名单、统一预算、timeout、去重和 fallback 下执行适用请求 |
 | 有界迭代检索 | 可选二次检索，受轮数、Query Rewrite、工具、LLM 和超时预算控制；默认关闭 |
 | 可观测性 | Trace 记录检索候选、证据评估、候选计划、工具调用、预算、停止原因、模型和延迟 |
 | Web 演示 | 新增 React + TypeScript 页面和 workflow SSE，可实时展示节点进度及最终 Answer、Citation、Evidence、Trace；原生 HTML/JavaScript 页面继续保留 |
@@ -61,8 +61,10 @@ flowchart LR
     SVC --> G["LangGraph Workflow"]
     G --> SAFE["Scope / Safety Gate"]
     SAFE -->|"blocked"| REFUSE["Safe Refusal"]
-    SAFE -->|"accepted"| SHADOW["Intent + Router + Planner (Shadow)"]
-    SHADOW --> FIXED["Fixed Routing"]
+    SAFE -->|"accepted"| ROUTE["Rule-first Router"]
+    ROUTE -->|"flag off / stable rule"| FIXED["Fixed Routing"]
+    ROUTE -. "flag on + eligible" .-> PLAN["Bounded Planner + Executor"]
+    PLAN -->|"validated / fallback"| FIXED
     FIXED --> TOOL["Tool Registry"]
     TOOL --> RET["Hybrid Retrieval / Static SQLite / Document Page"]
     RET --> D["Qdrant / BGE"]
@@ -99,24 +101,26 @@ flowchart LR
 1. FastAPI 接收问题并生成 `request_id`。
 2. Service 处理会话上下文，调用 LangGraph。
 3. Scope/Safety Gate 在检索和模型调用前短路危险请求、越界型号和资料不足的版本问题。
-4. Shadow 层生成 intent、candidate plan 和 bounded structured plan，但不替代真实路由。
-5. 固定路由通过 Tool Registry 执行结构化查询；`retrieve` 节点通过同一 Registry 执行一次 `search_manual`，进入 Dense + BM25 + RRF + Rerank 检索。
-6. Evidence Gate 判断证据是否足够，并记录原始缺失词、过滤后标识符和被忽略泛词。
-7. 默认路径保留原有单次 Query Rewrite；实验性迭代检索只有在显式开启且预算允许时才补充一轮证据。
-8. 证据充分时执行基于证据的生成（grounded generation）；模型不可用时按 fallback 链降级。
-9. Citation Guard 校验引用，输出回答、证据、运行统计和完整 Trace。
+4. 规则优先：Safety、越界、明确故障码、明确参数和普通单步检索不进入真实 Planner。默认关闭时，Planner/Router 只记录候选计划。
+5. 开启 `ENABLE_AGENTIC_ROUTING` 后，表格定位、跨章节流程和版本核对等适用请求可进入确定性 Planner；计划先经 Pydantic 和 Tool Registry 参数 Schema 双重校验，再由统一 executor 执行。
+6. 固定路由或受控计划都通过同一 Tool Registry；计划已经执行的相同 `search_manual` 会在 `retrieve` 节点复用，不重复进行 Dense/BM25/RRF/Rerank，也不重复增加真实工具指标。
+7. Evidence Gate 判断证据是否足够，并记录原始缺失词、过滤后标识符和被忽略泛词。
+8. `ENABLE_AGENTIC_ROUTING=false` 且 Iterative Retrieval 关闭时，固定路径保留原有一次 Query Rewrite，不让新增 Agent budget 提前截断旧流程；Planner 实际参与后，Query Rewrite 才与它共用工具、轮数、改写次数和 Agent 检索/工具阶段的时间预算。
+9. 证据充分时执行基于证据的生成（grounded generation）；模型不可用时按 fallback 链降级。
+10. Citation Guard 校验引用，输出回答、证据、运行统计和完整 Trace。
 
 ## Agentic RAG 扩展能力
 
 - `IntentClassifier`：规则式识别故障诊断、参数、表格、跨章节流程、版本、安全和越界意图，不调用 LLM。
-- `ToolRouter`：为 intent 生成白名单候选工具序列；候选序列仅进入 shadow Trace，不决定当前真实路由。
-- `BoundedQueryPlanner`：最多生成 3 个白名单候选步骤，带 `max_rounds`、`max_tool_calls` 和 `applied=false`；当前不执行这些步骤。
+- `ToolRouter`：规则优先选择是否进入 Planner，并按照当前 Tool Registry 的 `agent_names` 过滤候选；不维护第二套可执行白名单。
+- `BoundedQueryPlanner`：不调用 LLM，最多生成 3 个严格 Pydantic `PlanStep`；每步包含 `tool_name`、`arguments`、`reason` 和 `expected_evidence`。
+- `ControlledAgentExecutor`：统一负责计划校验、Registry 参数复核、request-scoped budget、timeout、调用签名、结果缓存、去重和 fallback。
 - `ToolRegistry`：工具注册中心，登记四个带独立 Pydantic 输入模型的核心工具，并统一处理参数校验、未知工具、`max_tool_calls`、单工具 timeout、异常和 `ToolCallTrace`。
 - `SQLiteToolbox`：结构化知识查询组件，作为 Registry 中故障码和参数工具的底层实现，以统一 `ToolResult` 返回结构化 data、证据、provenance、耗时和错误。工具结果不能在没有可靠来源时直接成为最终事实。
 - `DocumentPageService`：原始页证据读取服务，优先按已处理 chunk 的文档与页码定位证据，必要时只打开精确匹配 PDF 的指定页，不扫描整份 PDF。
 - Iterative Retrieval：只在证据不足、存在有效技术标识符且预算允许时重试；`0`、`PLC`、手册、参数等泛词不能单独触发重试。
 
-这些能力构成“轻量级 Agentic RAG”：系统能够分析意图、形成受约束计划、选择候选工具、评估证据并决定是否停止，但不允许开放式工具生成或无限循环。
+这些能力构成“受控 Agent”：系统能够在显式开关下执行确定性计划，但固定工作流始终保留为 fallback；它不允许开放式工具生成、任意 SQL、外部 Web、系统状态修改或无限循环。
 
 ## 为什么不是 naive RAG
 
@@ -127,7 +131,7 @@ naive RAG 通常是“一次向量检索 → 拼接 TopK → LLM 回答”。本
 - 证据可能不足，因此在生成前设置 Evidence Gate；
 - 引用可能越界，因此生成后设置 Citation Guard；
 - 工业请求存在安全和版本边界，因此安全检查位于检索和 LLM 之前；
-- Agent 决策需要可解释，因此 shadow plan、budget、stop reason 和检索轮次全部进入 Trace。
+- Agent 决策需要可解释，因此 candidate/applied plan、budget、fallback reason、复用状态、stop reason 和检索轮次全部进入 Trace。
 
 ## 本地启动
 
@@ -201,7 +205,7 @@ request_started -> analyzing -> tool_selected -> retrieving -> reranking
 
 安全门控（Safety Gate）拒绝路径会跳过工具和检索，异常路径以 `error` 结束。每个事件包含 `event`、`request_id`、`timestamp`、`stage`、`message` 和经过脱敏的 `data`；`completed.data.response` 是与 `/api/chat` 相同的完整 `ChatResponse`。页面基于该响应展示 Answer、可展开 Citation、Evidence 和 Trace，包括工具调用、问题改写、检索轮次、停止原因、延迟、模型/provider 表示及可用的 Token 消耗（token usage）。
 
-当前是工作流事件流（workflow event streaming），不是 Token Streaming：LLM Client 仍使用非流式请求，最终回答随 `completed` 事件一次性返回。页面的“停止接收”使用浏览器 AbortController，只停止前端等待和连接；后端会尽快停止等待，但正在执行的同步检索或模型 I/O 可能短暂继续。Planner/Router 仍为 shadow；本地 MCP 继续作为独立 stdio 入口，不经 SSE。
+当前是工作流事件流（workflow event streaming），不是 Token Streaming：LLM Client 仍使用非流式请求，最终回答随 `completed` 事件一次性返回。页面的“停止接收”使用浏览器 AbortController，只停止前端等待和连接；后端会尽快停止等待，但正在执行的同步检索或模型 I/O 可能短暂继续。受控 Planner 是否执行由后端 feature flag 决定；本地 MCP 继续作为独立 stdio 入口，不经 SSE。
 
 ## 本地 MCP Server
 
@@ -228,7 +232,7 @@ stdio Server 启动后会等待 MCP Client 通过标准输入/输出通信，不
 
 四个工具的 `inputSchema` 直接来自现有 Pydantic 输入模型；响应同时包含 JSON 文本 `content` 和完整 `ToolResult` 结构化内容，保留 evidence、provenance、Trace、耗时和错误。每个 MCP 进程只初始化一套 Service/Registry，多个调用复用该实例，退出时统一释放 Retriever 和工具线程池。
 
-当前边界：只实现本地 stdio transport，没有远程 HTTP MCP、认证、TLS 或多租户隔离；`get_document_page` 仍受现有精确文档匹配和页码约束，不能读取任意文件。Planner/Router 仍为 shadow，LangGraph 直接调用 Tool Registry，不通过 MCP 回调自身。因此系统仍不是 fully autonomous Agent，也不代表生产级远程 MCP 部署。
+当前边界：只实现本地 stdio transport，没有远程 HTTP MCP、认证、TLS 或多租户隔离；`get_document_page` 仍受现有精确文档匹配和页码约束，不能读取任意文件。LangGraph 的受控 Planner 与 MCP 共用 Tool Registry，但不会通过 MCP 回调自身。因此系统仍不是 fully autonomous Agent，也不代表生产级远程 MCP 部署。
 
 ## 运行数据访问层（Runtime Repository）与 PostgreSQL
 
@@ -354,7 +358,9 @@ MAX_REWRITES=1
 DATABASE_BACKEND=sqlite
 ```
 
-因此默认 API 不会让 Agentic Router、Planner 或 Iterative Retrieval 接管主流程。即使启用 Router 或 Planner 的配置开关，当前代码也只产生 shadow trace。固定 Graph 的真实工具调用已受 Registry 的 `max_tool_calls` 和单工具 timeout 约束；其他 Agent budget 字段继续约束迭代检索和生成阶段。
+`ENABLE_AGENTIC_ROUTING=false` 时 API 保持固定 Graph，Planner/Router 只产生候选 Trace；在 Iterative Retrieval 也关闭时，新增 Agent budget 不会改变旧固定路径的一次 Query Rewrite、检索、Evidence Gate 和 Citation Guard 行为。Trace 会继续包含扩展后的候选 Plan 与预算字段，因此不承诺 Trace payload 与阶段 G 前逐字节一致。设置为 `true` 后，仅适用 intent 进入受控 Planner；明确故障码、明确参数、普通单步检索、Safety 和 Out-of-scope 仍走稳定规则。`ENABLE_AGENTIC_PLANNER` 是旧的 shadow 配置兼容项，不是当前真实执行开关。
+
+受控执行只允许 Tool Registry 标记的 `search_manual`、`lookup_fault_code`、`lookup_parameter`、`get_document_page`。请求级预算统一限制 `MAX_AGENT_ROUNDS`、`MAX_TOOL_CALLS`、`MAX_REWRITES` 和 `TOOL_TIMEOUT_SECONDS`；`AGENT_TIMEOUT_SECONDS` 是从 Agent 分析开始计算、用于限制 Planner 工具执行及后续检索/改写是否继续的剩余时间，不是覆盖 LLM、Citation Guard 或整个 HTTP 生命周期的硬 deadline。完全相同的工具名与规范化参数只真正执行一次。结构化故障码/参数结果只是线索，最终回答仍必须经过手册 Evidence Gate 和 Citation Guard；`get_document_page` 只能使用已有 Evidence 中明确出现的文档与页码。
 
 ## 可观测性（Observability）
 
@@ -403,6 +409,11 @@ RAG 与检索指标：
 | 最终证据数 | `final_evidence_count` | 最终保留并交给回答阶段的证据片段有多少。 |
 | 检索耗时 | `retrieval_ms` | 记录一次 `search_manual` 的完整检索耗时，不会把 Dense、BM25、RRF 和 Rerank 分别重复计成检索请求。 |
 | Dense/BM25/RRF/Rerank 耗时 | `dense_ms` / `bm25_ms` / `fusion_ms` / `rerank_ms` | 分别记录 Dense、BM25、RRF 融合和 Rerank 阶段的耗时。 |
+| Planner 尝试/应用/回退次数 | `planner_attempt_total` / `planner_applied_total` / `planner_fallback_total` | 分别表示多少请求尝试、成功应用或回退了受控计划。 |
+| Planner 错误次数 | `planner_error_total` | 计划解析、Schema、未知工具、timeout 或 executor 异常导致回退的次数。 |
+| Agent 轮数 | `agent_round_total` | 所有受控 Planner 请求实际使用轮数的累计值。 |
+| 工具复用次数 | `tool_reuse_total` | 相同签名的工具结果被请求级缓存复用、没有再次真实执行的次数。 |
+| 预算耗尽次数 | `budget_exhausted_total` | 因轮数、工具次数、改写次数或 Agent 检索/工具阶段时间预算停止的请求数。 |
 
 LLM 与工具指标：
 
@@ -415,7 +426,7 @@ LLM 与工具指标：
 | Token 消耗（token usage） | `input_tokens` / `output_tokens` / `total_tokens` | 分别记录输入、输出和总 Token 数；缺少 Provider 用量时不会猜测。 |
 | 有 Token 数据的请求数 | `token_usage_request_total` | 有多少次请求真实返回了 `total_tokens`，它也是平均 Token 数的分母。 |
 | 平均 Token 数 | `average_total_tokens` | 仅对真实返回 Token 消耗的请求计算平均值。 |
-| 工具调用次数（tool call） | `tool_call_total` | 四个正式工具在 Tool Registry 统一完成点一共执行了多少次。 |
+| 工具调用尝试次数（tool call attempts） | `tool_call_total` | 四个正式工具到达 Tool Registry 统一完成点的尝试次数；包含 unknown tool、参数非法或预算拒绝等 `executed=false` 尝试，不等于 handler 真实执行次数。 |
 | 工具成功/失败/超时次数 | `tool_success_total` / `tool_error_total` / `tool_timeout_total` | 分别表示工具调用成功、失败和超时的次数。 |
 | MCP 工具调用次数 | `mcp_tool_call_total` | 通过 MCP 发起的工具调用次数；它不会让通用工具计数重复累加。 |
 | 工具耗时 | `tool_ms` | 记录工具调用耗时，并按固定工具名分别汇总。 |
@@ -465,7 +476,7 @@ LLM 与工具指标：
 
 ## 当前评测摘要
 
-- Pytest：默认环境 180 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；本轮未重跑专用 PostgreSQL 环境。
+- Pytest：默认环境 196 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；本轮未重跑专用 PostgreSQL 环境。
 - Formal dataset：`formal_eval_v1`，60 题，development 40 / test 20；SHA-256 为 `3b33876cd584e6215ef03a8bb07d0566aa57371957e606196c37b6f26641a4d9`。跳过 chunk 存在性检查时为 0 validation errors；由于官方资料占比和独立复核数量不足，`ready_for_resume_accuracy_claim=false`。
 - 当前 processed corpus 由 6 个文档生成 16945 个 chunks（正文 4934、表格 12011），SHA-256 为 `090f5e5f416ea1762d4f71e7a28b10d0e7f083ef30ae04f3a305c1b6b769a213`；formal gold 11/11、test gold 8/8 可解析。
 - 冻结 test split 20 题已真实运行：Retrieval 的 Strict Recall@5 0.8667、MRR@5 1.0000、nDCG@5 0.9028、Top1 Accuracy 1.0000；End-to-End 规则指标为 Citation Correctness 0.9286、Required Fact Coverage 0.3929、Technical Identifier Accuracy 0.6316、Refusal Accuracy 0.9500、false accept 0、false reject 0.0667，多跳 Evidence Coverage 1.0000（仅 4 个适用样本）。
@@ -473,10 +484,10 @@ LLM 与工具指标：
 - 新 E2E Schema 分开报告 `citation_correctness_rate`、规则型 `required_fact_coverage`、`technical_identifier_accuracy`、`multi_hop_evidence_coverage`、`refusal_accuracy`、`false_accept_rate` 和 `false_reject_rate`；不适用字段为 `null`。
 - `claim_support_rate` 本轮为 `null`，不以 0 代替，也不包装成完整 Answer Faithfulness；本轮未启用 LLM-as-a-judge。
 - test 中参数、表格、越界、Safety、无答案类别均少于 3 题。该类别样本量较小，仅用于诊断，不代表稳定统计结论。
-- Agentic shadow：24 个 overlay case，Intent/Tool/Plan Valid 均为 1.0000；Budget/Whitelist/Loop Violation 均为 0。
+- Agentic shadow：阶段 G 代码下的只读临时重跑为 24 个 overlay case，Intent Accuracy 1.0000、Tool Selection Accuracy 0.8750、Plan Valid 1.0000，Budget/Whitelist/Loop Violation 均为 0。3 个旧表格 case 仍期待已从 Router 移除的 `lookup_table_rows`，因此版本化旧报告的 Tool Selection 1.0000 属于阶段 G 前历史结果；本阶段没有为追分修改该 overlay 数据集。
 - Iterative retrieval：过滤前 Retry Trigger Rate 0.0571，过滤后为 0；Unnecessary Retry Rate 从阶段 6 的 1.0000 降为 0；Loop/Safety/Out-of-scope Regression 均为 0。
 
-Shadow 评测的 100% 只表示规则分类和候选计划符合 overlay 预期，不代表最终问答准确率。
+Shadow Plan Valid 的 100% 只表示计划结构、预算和循环约束有效，不代表最终问答准确率。
 
 ## 风险与边界
 

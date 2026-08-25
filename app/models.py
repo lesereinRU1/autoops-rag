@@ -29,7 +29,7 @@ class SearchHit(BaseModel):
 
 
 class SearchManualInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     query: str = Field(
         min_length=1,
@@ -56,7 +56,7 @@ class SearchManualInput(BaseModel):
 
 
 class LookupFaultCodeInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     code: str = Field(
         min_length=1,
@@ -77,7 +77,7 @@ class LookupFaultCodeInput(BaseModel):
 
 
 class LookupParameterInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     name: str = Field(
         min_length=1,
@@ -102,7 +102,7 @@ class LookupParameterInput(BaseModel):
 
 
 class GetDocumentPageInput(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     document_id: str | None = Field(
         default=None,
@@ -138,6 +138,10 @@ class ToolCallTrace(BaseModel):
     started_at: datetime
     latency_ms: float = 0.0
     executed: bool = True
+    reused: bool = False
+    deduplicated: bool = False
+    planner_round: int | None = Field(default=None, ge=1)
+    remaining_budget: dict[str, Any] = Field(default_factory=dict)
     success: bool = False
     result_count: int = Field(default=0, ge=0)
     error: str = ""
@@ -262,6 +266,11 @@ class RagTraceResponse(BaseModel):
     rewrite_triggered: bool = False
     rewritten_queries: list[str] = Field(default_factory=list)
     retrieval_rounds: list[dict[str, Any]] = Field(default_factory=list)
+    planner_attempted: bool = False
+    planner_applied: bool = False
+    planner_fallback: bool = False
+    planner_fallback_reason: str = ""
+    planner_round: int = 0
 
 
 class ChatResponse(BaseModel):

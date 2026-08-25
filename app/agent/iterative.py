@@ -160,21 +160,42 @@ def budget_snapshot(
 ) -> dict[str, Any]:
     current = time.monotonic() if now is None else now
     started = float(state.get("agent_started_at", current))
+    max_rounds = max(int(_config(config, "max_agent_rounds", 2)), 0)
+    max_tool_calls = max(int(_config(config, "max_tool_calls", 4)), 0)
+    max_rewrites = max(int(_config(config, "max_rewrites", 1)), 0)
+    timeout_seconds = max(
+        float(_config(config, "agent_timeout_seconds", 60.0)), 0.0
+    )
+    retrieval_rounds = int(state.get("round_count", 0))
+    planner_rounds = int(state.get("planner_round", 0))
+    rounds_used = max(retrieval_rounds, planner_rounds)
+    tool_calls_used = _tool_calls_used(state)
+    rewrites_used = int(state.get("retry_count", 0))
+    elapsed_ms = round(max(0.0, current - started) * 1000, 2)
     return {
-        "max_rounds": int(_config(config, "max_agent_rounds", 2)),
-        "max_tool_calls": int(_config(config, "max_tool_calls", 4)),
+        "max_rounds": max_rounds,
+        "max_tool_calls": max_tool_calls,
         "max_llm_calls": int(_config(config, "max_llm_calls", 2)),
-        "timeout_seconds": float(_config(config, "agent_timeout_seconds", 60.0)),
-        "max_rewrites": int(_config(config, "max_rewrites", 1)),
-        "rounds_used": int(state.get("round_count", 0)),
-        "tool_calls_used": _tool_calls_used(state),
+        "timeout_seconds": timeout_seconds,
+        "tool_timeout_seconds": max(
+            float(_config(config, "tool_timeout_seconds", 30.0)), 0.001
+        ),
+        "max_rewrites": max_rewrites,
+        "rounds_used": rounds_used,
+        "retrieval_rounds_used": retrieval_rounds,
+        "planner_rounds_used": planner_rounds,
+        "tool_calls_used": tool_calls_used,
         "llm_calls_used": int(
             state.get("budget", {}).get("llm_calls_used", 0)
             if llm_calls_used is None
             else llm_calls_used
         ),
-        "rewrites_used": int(state.get("retry_count", 0)),
-        "elapsed_ms": round(max(0.0, current - started) * 1000, 2),
+        "rewrites_used": rewrites_used,
+        "remaining_rounds": max(max_rounds - rounds_used, 0),
+        "remaining_tool_calls": max(max_tool_calls - tool_calls_used, 0),
+        "remaining_rewrites": max(max_rewrites - rewrites_used, 0),
+        "remaining_ms": round(max(timeout_seconds * 1000 - elapsed_ms, 0.0), 2),
+        "elapsed_ms": elapsed_ms,
     }
 
 

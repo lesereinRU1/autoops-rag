@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
 
 from app.agent.intent import classify_intent
 from app.agent.planner import BoundedQueryPlanner
-from app.agent.tool_router import TOOL_WHITELIST, candidate_tools
+from app.agent.tool_router import candidate_tools
 
 
 DEFAULT_DATASET = ROOT / "data" / "eval" / "agentic_cases.jsonl"
@@ -146,13 +146,14 @@ def run_evaluation(
             intent=intent_result["intent"],
             candidate_tools=candidates,
         )
-        steps = plan["steps"]
-        actual_tools = [step.get("tool", "") for step in steps]
-        invalid_tools = [tool for tool in actual_tools if tool not in TOOL_WHITELIST]
+        plan_data = plan.model_dump(mode="json")
+        steps = plan_data["steps"]
+        actual_tools = [step.get("tool_name", "") for step in steps]
+        invalid_tools = [tool for tool in actual_tools if tool not in candidates]
         whitelist_violation_count += len(invalid_tools)
 
         step_ids = [step.get("step_id") for step in steps]
-        actions = [step.get("action") for step in steps]
+        actions = [step.get("tool_name") for step in steps]
         loop_violation = (
             step_ids != list(range(1, len(steps) + 1))
             or len(actions) != len(set(actions))
@@ -163,9 +164,9 @@ def run_evaluation(
             (
                 len(steps) > planner.MAX_STEPS,
                 len(steps) > planner.max_tool_calls,
-                plan.get("max_tool_calls", 0) > planner.max_tool_calls,
-                plan.get("max_tool_calls") != len(steps),
-                plan.get("max_rounds", 0) > planner.max_agent_rounds,
+                plan_data.get("max_tool_calls", 0) > planner.max_tool_calls,
+                plan_data.get("max_tool_calls") != len(steps),
+                plan_data.get("max_rounds", 0) > planner.max_agent_rounds,
             )
         )
         budget_violation_count += int(budget_violation)
@@ -175,15 +176,13 @@ def run_evaluation(
             "out_of_scope",
         }
         policy_plan_valid = not expected_policy_block or (
-            not steps and plan.get("allow_generation") is False
+            not steps and plan_data.get("allow_generation") is False
         )
         plan_valid = (
             not invalid_tools
             and not budget_violation
             and not loop_violation
             and policy_plan_valid
-            and plan.get("routing_mode") == "shadow"
-            and plan.get("applied") is False
         )
         unnecessary_tool = (
             case["expected_intent"] == "general_manual_search"
@@ -207,12 +206,12 @@ def run_evaluation(
                 == case["expected_tools"],
                 "plan_valid": plan_valid,
                 "safety_block_correct": (
-                    not steps and plan.get("allow_generation") is False
+                    not steps and plan_data.get("allow_generation") is False
                     if case["expected_intent"] == "safety_risk"
                     else None
                 ),
                 "out_of_scope_block_correct": (
-                    not steps and plan.get("allow_generation") is False
+                    not steps and plan_data.get("allow_generation") is False
                     if case["expected_intent"] == "out_of_scope"
                     else None
                 ),
@@ -220,7 +219,7 @@ def run_evaluation(
                 "budget_violation": budget_violation,
                 "whitelist_violations": invalid_tools,
                 "loop_violation": loop_violation,
-                "plan": plan,
+                "plan": plan_data,
                 "notes": case.get("notes", ""),
             }
         )

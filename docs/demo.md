@@ -40,7 +40,7 @@
 
 ![测试与校验](images/05-测试与校验.png)
 
-展示当前自动化检查结果：
+展示截图拍摄时的历史自动化检查结果，并非当前 working tree 的测试计数：
 
 - Pytest：53 passed。
 - Formal eval 数据校验：60 questions、0 errors。
@@ -74,4 +74,3 @@ README 当前展示四张核心图片：
 - 不得出现 `.env`、API Key、Authorization、Bearer、`sk-`、设备 IP 或私有 raw 数据。
 - 模型名、token、fallback reason 和评测数字必须来自截图对应的真实运行。
 - Formal eval 截图必须保留题数、split 或限制说明，不能只截取高分数字。
-

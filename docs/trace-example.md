@@ -6,10 +6,10 @@ Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些�
 {
   "request_id": "demo-trace-20260706-001",
   "created_at": "2026-07-06T10:30:00.000+08:00",
-  "original_question": "16#80C8 应优先检查哪些通信条件？",
+  "original_question": "通信失败时应该如何分层排查？",
   "device_model": "S7-1200",
-  "question_type": "lookup_alarm_code",
-  "selected_tool": "lookup_alarm_code",
+  "question_type": "search_manual",
+  "selected_tool": "search_manual",
   "retrieval_strategy": "dense+bm25+rrf+light_rerank",
   "query_rewrite_attempts": 0,
   "dense_topk": [
@@ -59,57 +59,76 @@ Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些�
   "evidence_sufficient": true,
   "warnings": [],
   "intent": {
-    "intent": "alarm_diagnosis",
-    "confidence": 0.95,
-    "matched_keywords": ["16#80C8"],
-    "reason": "matched fault-code pattern"
+    "intent": "cross_section_procedure",
+    "confidence": 0.88,
+    "matched_keywords": ["分层排查"],
+    "reason": "检测到需要跨章节组织的流程或分层排查意图"
   },
   "candidate_plan": [
-    "lookup_fault_code",
-    "search_manual"
+    "search_manual",
+    "get_document_page"
   ],
   "plan": {
-    "intent": "alarm_diagnosis",
+    "intent": "cross_section_procedure",
     "steps": [
       {
         "step_id": 1,
-        "action": "lookup_fault_code",
-        "tool": "lookup_fault_code",
-        "purpose": "查询结构化故障码记录"
-      },
-      {
-        "step_id": 2,
-        "action": "search_manual",
-        "tool": "search_manual",
-        "purpose": "检索手册证据"
+        "tool_name": "search_manual",
+        "arguments": {
+          "query": "通信失败时应该如何分层排查？",
+          "model": "S7-1200",
+          "version": "",
+          "top_k": 5
+        },
+        "reason": "检索跨章节流程的官方手册证据",
+        "expected_evidence": "manual_evidence"
       }
     ],
     "allow_generation": true,
     "need_evidence_gate": true,
     "max_rounds": 1,
-    "max_tool_calls": 2,
-    "routing_mode": "shadow",
-    "applied": false
+    "max_tool_calls": 1
   },
+  "planner_attempted": true,
+  "planner_applied": true,
+  "planner_fallback": false,
+  "planner_fallback_reason": "",
+  "planner_round": 1,
   "tool_calls": [
     {
-      "tool_name": "lookup_fault_code",
-      "tool": "lookup_fault_code",
-      "arguments": {"code": "80C8", "model": "S7-1200", "version": ""},
+      "tool_name": "search_manual",
+      "tool": "search_manual",
+      "arguments": {
+        "query": "通信失败时应该如何分层排查？",
+        "model": "S7-1200",
+        "version": "",
+        "top_k": 5
+      },
       "started_at": "2026-07-06T10:30:00.010+08:00",
-      "latency_ms": 0.8,
+      "latency_ms": 318.4,
       "executed": true,
+      "reused": false,
+      "deduplicated": false,
+      "planner_round": 1,
       "success": true,
-      "result_count": 1,
+      "result_count": 5,
       "error": ""
     },
     {
       "tool_name": "search_manual",
       "tool": "search_manual",
-      "arguments": {"query": "16#80C8 应优先检查哪些通信条件？", "model": "S7-1200", "version": "", "top_k": 5},
+      "arguments": {
+        "query": "通信失败时应该如何分层排查？",
+        "model": "S7-1200",
+        "version": "",
+        "top_k": 5
+      },
       "started_at": "2026-07-06T10:30:00.020+08:00",
-      "latency_ms": 318.4,
-      "executed": true,
+      "latency_ms": 0.0,
+      "executed": false,
+      "reused": true,
+      "deduplicated": true,
+      "planner_round": 1,
       "success": true,
       "result_count": 5,
       "error": "",
@@ -122,11 +141,18 @@ Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些�
     "max_tool_calls": 4,
     "max_llm_calls": 2,
     "timeout_seconds": 60.0,
+    "tool_timeout_seconds": 30.0,
     "max_rewrites": 1,
     "rounds_used": 1,
-    "tool_calls_used": 2,
+    "retrieval_rounds_used": 1,
+    "planner_rounds_used": 1,
+    "tool_calls_used": 1,
     "llm_calls_used": 0,
     "rewrites_used": 0,
+    "remaining_rounds": 1,
+    "remaining_tool_calls": 3,
+    "remaining_rewrites": 1,
+    "remaining_ms": 59638.8,
     "elapsed_ms": 361.2
   },
   "stop_reason": "evidence_sufficient",
@@ -151,7 +177,7 @@ Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些�
   "retrieval_rounds": [
     {
       "round": 1,
-      "query": "16#80C8 应优先检查哪些通信条件？",
+      "query": "通信失败时应该如何分层排查？",
       "rewritten_query": "",
       "evidence_count": 5,
       "evidence_score": 0.91,
@@ -167,10 +193,10 @@ Trace 用于回答“这一次请求具体经过了哪些步骤、用了哪些�
 
 ## 如何阅读
 
-1. `selected_tool` 是已真实执行的固定路由选择；`candidate_plan` 和 `plan` 是影子模式（shadow）结果，`plan.applied=false` 表示它们没有接管执行。
+1. `selected_tool` 保留固定路由的兼容值；`candidate_plan` 和 `plan` 是严格候选计划。通过 `planner_attempted`、`planner_applied`、`planner_fallback` 和 `planner_fallback_reason` 判断本次计划是否真实执行；flag=false 时它们保持默认值。
 2. `evidence_assessments` 是证据充分性判断（Evidence Gate）的记录，用来解释证据为何通过或为何需要停止/重试。
 3. `rewrite_triggered`、`rewritten_queries` 和 `retrieval_rounds` 展示有界的问题改写（Query Rewrite）与检索轮次。
-4. `budget` 记录上限与已使用次数；`stop_reason` 给出最终停止原因。
+4. `budget` 记录统一的轮数、工具、改写、单工具 timeout 和 Agent 检索/工具阶段的剩余时间；`agent_timeout_seconds` 不代表覆盖 LLM、Citation Guard 或 HTTP 全生命周期的硬 deadline。`stop_reason` 给出最终停止原因。工具调用中的 `reused=true` / `deduplicated=true` 表示结果来自请求级缓存，没有重复执行 Registry handler；因此示例中的两条 `search_manual` Trace 只有第一条 `executed=true`。
 5. `final_evidence`、`injected_context` 和 `used_chunk_ids` 用于追踪实际注入的证据来源。
 6. `first_token_latency_ms` 当前应读作“响应可用耗时（当前不代表真实 TTFT）”；LLM 不是 Token Streaming，因此该字段不是严格的首 Token 延迟。
 

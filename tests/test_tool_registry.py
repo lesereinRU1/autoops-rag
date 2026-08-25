@@ -97,10 +97,31 @@ def test_four_tools_are_registered_with_independent_input_models(registry):
         "lookup_parameter",
         "get_document_page",
     }
+    assert set(tools.agent_names) == set(tools.names)
     assert tools.input_model("search_manual") is SearchManualInput
     assert tools.input_model("lookup_fault_code") is LookupFaultCodeInput
     assert tools.input_model("lookup_parameter") is LookupParameterInput
     assert tools.input_model("get_document_page") is GetDocumentPageInput
+
+
+def test_dynamic_registration_does_not_expand_agent_execution_tools(registry):
+    tools, _ = registry
+    original_agent_names = tools.agent_names
+
+    tools.register(
+        "dynamic_unknown",
+        SearchManualInput,
+        lambda _payload: ToolResult(success=True),
+    )
+
+    assert "dynamic_unknown" in tools.names
+    assert tools.agent_names == original_agent_names
+    with pytest.raises(KeyError, match="unknown_tool"):
+        tools.validate_arguments(
+            "dynamic_unknown",
+            {"query": "test"},
+            agent_only=True,
+        )
     assert tools.input_model("lookup_alarm_code") is LookupFaultCodeInput
 
 
@@ -120,6 +141,37 @@ def test_pydantic_inputs_reject_empty_invalid_and_ambiguous_values(registry):
 
     tools, retriever = registry
     result = tools.execute("search_manual", {"query": "", "top_k": 99})
+    assert result.success is False
+    assert result.error == "tool_arguments_invalid"
+    assert result.call_trace is not None
+    assert result.call_trace.executed is False
+    assert retriever.calls == []
+
+
+@pytest.mark.parametrize(
+    ("input_model", "payload"),
+    [
+        (SearchManualInput, {"query": "MB_CLIENT", "unexpected": True}),
+        (LookupFaultCodeInput, {"code": "16#80C8", "unexpected": True}),
+        (LookupParameterInput, {"name": "PORT", "unexpected": True}),
+        (
+            GetDocumentPageInput,
+            {"document_id": "manual-1", "page": 12, "unexpected": True},
+        ),
+    ],
+)
+def test_all_agent_tool_input_models_forbid_unknown_fields(input_model, payload):
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        input_model.model_validate(payload)
+
+
+def test_registry_rejects_unknown_input_fields_without_executing_handler(registry):
+    tools, retriever = registry
+
+    result = tools.execute(
+        "search_manual", {"query": "MB_CLIENT", "unexpected": True}
+    )
+
     assert result.success is False
     assert result.error == "tool_arguments_invalid"
     assert result.call_trace is not None

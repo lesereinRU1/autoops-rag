@@ -1,7 +1,7 @@
 import json
 
 from app.agent.memory import MemoryStore
-from app.agent.tool_router import TOOL_CANDIDATES, TOOL_WHITELIST
+from app.agent.tool_router import TOOL_CANDIDATES
 from app.agent.tools import SQLiteToolbox
 from app.models import ToolResult
 
@@ -122,7 +122,7 @@ def test_table_tool_uses_bound_values_and_malicious_input_is_inert(tmp_path):
         ).fetchone()[0] == 1
 
 
-def test_implemented_tool_names_match_router_whitelist(tmp_path):
+def test_sqlite_toolbox_does_not_expose_internal_table_tool_to_router(tmp_path):
     tools, _ = _toolbox(tmp_path)
     results = [
         tools.lookup_fault_code(""),
@@ -130,10 +130,20 @@ def test_implemented_tool_names_match_router_whitelist(tmp_path):
         tools.lookup_table_rows(""),
     ]
 
-    assert all(result.tool in TOOL_WHITELIST for result in results)
+    assert {result.tool for result in results} == {
+        "lookup_fault_code",
+        "lookup_parameter",
+        "lookup_table_rows",
+    }
     assert all(result.latency_ms > 0 for result in results)
-    assert all(
-        tool in TOOL_WHITELIST
-        for candidates in TOOL_CANDIDATES.values()
-        for tool in candidates
-    )
+    router_tools = {
+        tool for candidates in TOOL_CANDIDATES.values() for tool in candidates
+    }
+    assert router_tools <= {
+        "search_manual",
+        "lookup_fault_code",
+        "lookup_parameter",
+        "get_document_page",
+    }
+    assert "lookup_table_rows" not in router_tools
+    assert "lookup_verified_solution" not in router_tools

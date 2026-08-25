@@ -151,6 +151,50 @@ def test_rag_llm_and_token_metrics_use_explicit_trace_facts_without_mutation():
     assert generation == original_generation
 
 
+def test_controlled_agent_metrics_distinguish_error_and_budget_fallbacks():
+    collector = MetricsCollector()
+    collector.observe_rag_trace(
+        {
+            "query_rewrite_attempts": 0,
+            "stop_reason": "evidence_sufficient",
+            "planner_attempted": True,
+            "planner_applied": False,
+            "planner_fallback": True,
+            "planner_fallback_reason": "unknown_tool",
+            "planner_round": 1,
+            "tool_calls": [],
+        },
+        {"external_calls": 0, "fallback_reason": "", "mode": "local_extractive"},
+    )
+    collector.observe_rag_trace(
+        {
+            "query_rewrite_attempts": 0,
+            "stop_reason": "max_tool_calls_reached",
+            "planner_attempted": True,
+            "planner_applied": False,
+            "planner_fallback": True,
+            "planner_fallback_reason": "max_tool_calls_reached",
+            "planner_round": 1,
+            "tool_calls": [],
+        },
+        {"external_calls": 0, "fallback_reason": "", "mode": "local_extractive"},
+    )
+
+    agent = collector.snapshot()["rag"]["agent"]
+    assert agent == {
+        "planner_attempt_total": 2,
+        "planner_applied_total": 0,
+        "planner_fallback_total": 2,
+        "planner_error_total": 1,
+        "agent_round_total": 2,
+        "tool_reuse_total": 0,
+        "budget_exhausted_total": 1,
+    }
+    prometheus = collector.prometheus_exposition()
+    assert "autoops_planner_attempt_total 2" in prometheus
+    assert "autoops_budget_exhausted_total 1" in prometheus
+
+
 class _Retriever:
     def __init__(self) -> None:
         self.calls = 0
@@ -204,6 +248,35 @@ def test_registry_is_the_only_tool_completion_point_and_retrieval_counts_once_pe
         assert snapshot["rag"]["retrieval"]["retrieved_candidate_count"][
             "lifetime_count"
         ] == 2
+    finally:
+        registry.close()
+
+
+def test_tool_call_total_counts_registry_attempts_but_not_rejected_retrievals(tmp_path):
+    collector = MetricsCollector()
+    registry, retriever = _registry(tmp_path, collector)
+    try:
+        invalid = registry.execute(
+            "search_manual", {"query": "valid", "unexpected": True}
+        )
+        budget_rejected = registry.execute(
+            "search_manual",
+            {"query": "valid"},
+            tool_calls=[{"tool_name": "search_manual", "executed": True}],
+            max_tool_calls=1,
+        )
+
+        assert invalid.call_trace is not None and invalid.call_trace.executed is False
+        assert (
+            budget_rejected.call_trace is not None
+            and budget_rejected.call_trace.executed is False
+        )
+        snapshot = collector.snapshot()
+        assert snapshot["tools"]["tool_call_total"] == 2
+        assert snapshot["tools"]["tool_error_total"] == 2
+        assert snapshot["rag"]["retrieval"]["retrieval_request_total"] == 0
+        assert retriever.calls == 0
+        assert "Tool Registry call attempts" in collector.prometheus_exposition()
     finally:
         registry.close()
 

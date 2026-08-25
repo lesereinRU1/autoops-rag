@@ -19,6 +19,16 @@ def test_agentic_state_defaults_are_fresh_and_disabled():
         "agentic_enabled": False,
         "rewritten_queries": [],
         "retrieval_rounds_trace": [],
+        "agentic_routing_enabled": False,
+        "planner_should_execute": False,
+        "planner_attempted": False,
+        "planner_applied": False,
+        "planner_fallback": False,
+        "planner_fallback_reason": "",
+        "planner_preparation_error": "",
+        "planner_round": 0,
+        "tool_result_cache": {},
+        "tool_call_signatures": [],
     }
     first["plan"]["steps"] = [{"tool": "test-only"}]
     assert second["plan"] == {}
@@ -77,6 +87,11 @@ def test_legacy_trace_deserializes_with_agentic_defaults():
     assert trace.rewrite_triggered is False
     assert trace.rewritten_queries == []
     assert trace.retrieval_rounds == []
+    assert trace.planner_attempted is False
+    assert trace.planner_applied is False
+    assert trace.planner_fallback is False
+    assert trace.planner_fallback_reason == ""
+    assert trace.planner_round == 0
 
     legacy_trace["plan"] = []
     assert RagTraceResponse.model_validate(legacy_trace).plan == []

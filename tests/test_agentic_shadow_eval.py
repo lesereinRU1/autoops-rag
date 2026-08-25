@@ -1,7 +1,7 @@
 import json
 from collections import Counter
 
-from app.agent.tool_router import TOOL_WHITELIST
+from app.agent.tool_router import candidate_tools
 from scripts.eval_agentic_shadow import (
     DEFAULT_DATASET,
     DEFAULT_SCHEMA,
@@ -40,7 +40,7 @@ def test_shadow_eval_has_no_policy_whitelist_budget_or_loop_violations():
     assert report["execution"]["tools_executed"] is False
     assert report["execution"]["planner_applied"] is False
     assert all(
-        step["tool"] in TOOL_WHITELIST
+        step["tool_name"] in candidate_tools(detail["actual_intent"])
         for detail in report["details"]
         for step in detail["plan"]["steps"]
     )

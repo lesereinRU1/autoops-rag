@@ -6,7 +6,7 @@
 
 | 项目 | 当前状态 | 含义 |
 |---|---:|---|
-| Pytest | 默认环境 180 passed、1 skipped | 跳过项为未配置专用测试 DSN 的 PostgreSQL integration test；本轮未重跑专用 PostgreSQL 环境 |
+| Pytest | 默认环境 206 passed、1 skipped | 跳过项为未配置专用测试 DSN 的 PostgreSQL integration test；阶段 G 增加受控 Planner、fallback、预算、去重、严格工具参数和指标语义测试，未重跑专用 PostgreSQL 环境 |
 | Dataset version | `formal_eval_v1` | formal 数据集由 manifest 冻结 |
 | Dataset SHA-256 | `3b33876cd584e6215ef03a8bb07d0566aa57371957e606196c37b6f26641a4d9` | test 运行前后 hash 一致 |
 | Formal questions | 60 | development 40、test 20；可回答 50、应拒答 10，其中 Safety 4 |
