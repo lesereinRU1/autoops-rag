@@ -184,7 +184,11 @@ def build_readiness(
         "evaluation_type": "formal_eval_readiness",
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "dataset": {
-            "file": str(dataset_path.relative_to(ROOT)) if dataset_path.is_relative_to(ROOT) else str(dataset_path),
+            "file": (
+                dataset_path.relative_to(ROOT).as_posix()
+                if dataset_path.is_relative_to(ROOT)
+                else dataset_path.name
+            ),
             "sha256": hashlib.sha256(raw).hexdigest(),
             "questions": len(clean_rows),
             "answerable": len(answerable),

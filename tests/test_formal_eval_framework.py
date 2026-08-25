@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from scripts import run_formal_eval
 from scripts.run_formal_eval import ndcg_at_5
 from scripts.validate_formal_eval import DEFAULT_SCHEMA, validate_dataset
 
@@ -170,3 +172,131 @@ def test_ndcg_at_5_rewards_earlier_gold() -> None:
 
     assert early == 1.0
     assert 0.0 < late < early
+
+
+def test_processed_corpus_metadata_records_hash_counts_and_gold_resolution(
+    tmp_path: Path,
+) -> None:
+    chunks = tmp_path / "chunks.jsonl"
+    _write_jsonl(
+        chunks,
+        [
+            {
+                "chunk_id": "chunk-1",
+                "doc_id": "doc-1",
+                "metadata": {"representation": "page_text"},
+            },
+            {
+                "chunk_id": "chunk-2",
+                "doc_id": "doc-2",
+                "metadata": {"representation": "table_row"},
+            },
+        ],
+    )
+    all_rows = [
+        {"gold_chunk_ids": ["chunk-1", "missing"]},
+        {"gold_chunk_ids": ["chunk-2"]},
+    ]
+
+    metadata = run_formal_eval.build_corpus_metadata(chunks, all_rows, all_rows[:1])
+
+    assert metadata["sha256"] == run_formal_eval.dataset_sha256(chunks)
+    assert metadata["file"] == "chunks.jsonl"
+    assert metadata["document_count"] == 2
+    assert metadata["chunk_count"] == 2
+    assert metadata["table_chunk_count"] == 1
+    assert metadata["formal_gold_resolvable_count"] == 2
+    assert metadata["formal_gold_missing"] == ["missing"]
+    assert metadata["selected_gold_resolvable_count"] == 1
+
+
+def test_markdown_metric_display_uses_json_null_spelling() -> None:
+    assert run_formal_eval.display_metric(None) == "null"
+    assert run_formal_eval.display_metric(0.0) == "0.0"
+
+
+def test_report_paths_are_repository_relative_and_never_absolute(
+    tmp_path: Path,
+) -> None:
+    repository_file = run_formal_eval.ROOT / "data" / "eval" / "formal_questions.jsonl"
+    external_file = tmp_path / "external.jsonl"
+
+    assert run_formal_eval.report_path(repository_file) == "data/eval/formal_questions.jsonl"
+    assert run_formal_eval.report_path(external_file) == "external.jsonl"
+    assert not Path(run_formal_eval.report_path(external_file)).is_absolute()
+
+
+def test_evaluation_repository_receives_only_case_summary_and_key_metrics(
+    monkeypatch,
+) -> None:
+    class Repository:
+        def __init__(self) -> None:
+            self.records: list[dict] = []
+            self.summary: dict = {}
+
+        def create_run(self, name, *, run_id, metadata):
+            assert name == "formal_evaluation"
+            assert "details" not in metadata
+            return run_id
+
+        def save_record(self, run_id, case_id, *, category, status, metrics, error):
+            self.records.append(
+                {
+                    "run_id": run_id,
+                    "case_id": case_id,
+                    "category": category,
+                    "status": status,
+                    "metrics": metrics,
+                    "error": error,
+                }
+            )
+
+        def complete_run(self, run_id, *, summary):
+            self.summary = summary
+
+    repository = Repository()
+
+    class Database:
+        repositories = SimpleNamespace(evaluations=repository)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(run_formal_eval, "get_settings", lambda: object())
+    monkeypatch.setattr(
+        run_formal_eval,
+        "create_runtime_database_from_settings",
+        lambda settings: Database(),
+    )
+    report = {
+        "status": "completed",
+        "run_id": "run-1",
+        "generated_at": "2026-08-25T00:00:00+08:00",
+        "dataset": {"version": "formal_eval_v1", "sha256": "abc"},
+        "metrics": {"strict_recall@5": 1.0, "citation_correctness_rate": 1.0},
+        "metric_denominators": {"retrieval_cases": 1},
+        "details": [
+            {
+                "case_id": "case-1",
+                "category": "alarm_code",
+                "http_status": 200,
+                "strict_recall@5": 1.0,
+                "citation_valid": True,
+                "required_fact_coverage": 1.0,
+                "tool_calls": [{"tool_name": "search_manual"}],
+                "evidence_chunk_ids": ["chunk-1"],
+                "answer": "large answer that belongs in the file report only",
+                "error": None,
+            }
+        ],
+    }
+
+    assert run_formal_eval.persist_evaluation_metadata(report) is True
+    assert len(repository.records) == 1
+    stored = repository.records[0]["metrics"]
+    assert stored["strict_recall@5"] == 1.0
+    assert stored["citation_valid"] is True
+    assert "answer" not in stored
+    assert "evidence_chunk_ids" not in stored
+    assert "tool_calls" not in stored
+    assert repository.summary["metrics"]["citation_correctness_rate"] == 1.0

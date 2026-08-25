@@ -1,0 +1,12 @@
+{
+  "dataset_version": "formal_eval_v1",
+  "dataset_file": "formal_questions.jsonl",
+  "sha256": "3b33876cd584e6215ef03a8bb07d0566aa57371957e606196c37b6f26641a4d9",
+  "case_count": 60,
+  "splits": {
+    "development": 40,
+    "test": 20
+  },
+  "gold_policy": "human_pre_labeled_only",
+  "test_set_policy": "test split is reserved for final reporting and must not be used for threshold tuning"
+}

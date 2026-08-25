@@ -283,7 +283,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build -
 
 `/health` 和 `/api/index/status` 会分别返回 `database_backend`、`database_status` 与脱敏的 `database_error_type`。运行数据库短暂不可用时，会话上下文、会话写入和 Trace metadata 会降级，不阻断静态手册检索；显式 Feedback/Verified Solution 写入仍会返回失败，不能伪装成已保存。
 
-Trace 采用“数据库 metadata + JSONL 完整 payload”：Repository 保存 `request_id`、时间、`session_id`、状态、错误、query/rewrite、工具、模型、延迟、Token 消耗和 stop reason；完整 retrieval candidates/evidence 继续写脱敏 JSONL。Formal evaluation 仍生成原 JSON/Markdown，同时写 evaluation run/record metadata，不改变指标口径。
+Trace 采用“数据库 metadata + JSONL 完整 payload”：Repository 保存 `request_id`、时间、`session_id`、状态、错误、query/rewrite、工具、模型、延迟、Token 消耗和 stop reason；完整 retrieval candidates/evidence 继续写脱敏 JSONL。Formal evaluation 仍生成 JSON/Markdown，同时只向 EvaluationRepository 写 run metadata、逐题状态/关键指标和汇总；Retrieval 历史口径保持不变，E2E 规则指标单独报告。
 
 当前 PostgreSQL 支持是单实例、同步 SQLAlchemy 和基础连接池方案，不包含高可用、备份恢复、读写分离、远程密钥管理或生产级运维承诺。
 
@@ -301,6 +301,15 @@ Ranking-only eval：
 ```powershell
 .\.venv\Scripts\python.exe scripts\eval_ranking_only.py --mode local --split development
 ```
+
+Formal evaluation 先做 dry-run；它只校验 `formal_eval_v1` manifest、dataset hash、split 和运行前置条件，不调用 API、不生成指标：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_formal_eval.py --dry-run --split test
+.\.venv\Scripts\python.exe scripts\run_formal_eval.py --split test
+```
+
+Formal evaluation 分为两层：Retrieval Evaluation 保留 Strict Recall@5、MRR@5、nDCG@5 和 Top1；End-to-End Rule Evaluation 计算 Citation Correctness、Required Fact Coverage、精确技术标识、多跳 Evidence coverage 和 Refusal Correctness。Retrieval Recall 不等于最终回答准确率。
 
 Agentic shadow eval：
 
@@ -456,9 +465,14 @@ LLM 与工具指标：
 
 ## 当前评测摘要
 
-- Pytest：默认环境 156 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；配置真实专用 DSN 后为 157 项通过。阶段 E 新增 10 项运行指标测试，原有 147 项全部保留并通过。
-- Formal validation：60 题，0 validation errors；由于官方资料占比和独立复核数量尚未达到门槛，`ready_for_resume_accuracy_claim=false`。
-- Ranking-only development：Strict Recall@5 1.0000、MRR@5 0.9343、nDCG@5 0.9377、Top1 Accuracy 0.8857。
+- Pytest：默认环境 180 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；本轮未重跑专用 PostgreSQL 环境。
+- Formal dataset：`formal_eval_v1`，60 题，development 40 / test 20；SHA-256 为 `3b33876cd584e6215ef03a8bb07d0566aa57371957e606196c37b6f26641a4d9`。跳过 chunk 存在性检查时为 0 validation errors；由于官方资料占比和独立复核数量不足，`ready_for_resume_accuracy_claim=false`。
+- 当前 processed corpus 由 6 个文档生成 16945 个 chunks（正文 4934、表格 12011），SHA-256 为 `090f5e5f416ea1762d4f71e7a28b10d0e7f083ef30ae04f3a305c1b6b769a213`；formal gold 11/11、test gold 8/8 可解析。
+- 冻结 test split 20 题已真实运行：Retrieval 的 Strict Recall@5 0.8667、MRR@5 1.0000、nDCG@5 0.9028、Top1 Accuracy 1.0000；End-to-End 规则指标为 Citation Correctness 0.9286、Required Fact Coverage 0.3929、Technical Identifier Accuracy 0.6316、Refusal Accuracy 0.9500、false accept 0、false reject 0.0667，多跳 Evidence Coverage 1.0000（仅 4 个适用样本）。
+- 旧 Ranking-only development 数值（Strict Recall@5 1.0000、MRR@5 0.9343、nDCG@5 0.9377、Top1 0.8857）来自旧 dataset hash `e251df9e...`，属于 stale/historical，不能继续作为当前正式结果。
+- 新 E2E Schema 分开报告 `citation_correctness_rate`、规则型 `required_fact_coverage`、`technical_identifier_accuracy`、`multi_hop_evidence_coverage`、`refusal_accuracy`、`false_accept_rate` 和 `false_reject_rate`；不适用字段为 `null`。
+- `claim_support_rate` 本轮为 `null`，不以 0 代替，也不包装成完整 Answer Faithfulness；本轮未启用 LLM-as-a-judge。
+- test 中参数、表格、越界、Safety、无答案类别均少于 3 题。该类别样本量较小，仅用于诊断，不代表稳定统计结论。
 - Agentic shadow：24 个 overlay case，Intent/Tool/Plan Valid 均为 1.0000；Budget/Whitelist/Loop Violation 均为 0。
 - Iterative retrieval：过滤前 Retry Trigger Rate 0.0571，过滤后为 0；Unnecessary Retry Rate 从阶段 6 的 1.0000 降为 0；Loop/Safety/Out-of-scope Regression 均为 0。
 
@@ -470,6 +484,9 @@ Shadow 评测的 100% 只表示规则分类和候选计划符合 overlay 预期�
 - 系统不连接 PLC，不执行下载、在线写寄存器、强制输出或旁路安全联锁。
 - Formal 数据集包含 60 题，但官方资料占比仅 6%，独立复核题数为 20，尚不能宣传生产级准确率。
 - Ranking-only 指标只评价人工 gold 是否进入 Top5 及其排序，不评价答案事实完整性。
+- 旧 hash `e251df9e...` 对应的 formal/ranking 结果必须标记为 stale/historical；当前 `reports/formal_evaluation.*` 已由 `formal_eval_v1` 当前 hash 的 test split 重跑生成。
+- Required Fact Coverage 是规则型 coverage，不是最终回答准确率；从 `required_facts` 提取的技术标识必须标记 `derived from required_facts`。
+- 只有至少两个必要 gold evidence 的多跳题才计算 multi-hop evidence coverage，其余为 `null`。
 - Shadow eval 不调用检索、工具或 LLM，不是端到端问答评测。
 - Iterative development 集校准后没有触发真实二次检索，证明了误触发减少，但仍需补充 retry-positive 数据验证召回收益。
 - SQLite 工具记录如果不能映射到可靠 `source/page/chunk_id`，只能作为候选信息，不能伪装成可引用事实。
