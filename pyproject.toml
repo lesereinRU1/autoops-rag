@@ -2,6 +2,9 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "postgres_integration: requires an explicit dedicated PostgreSQL test DSN",
+]
 
 [tool.coverage.run]
 source = ["app"]

@@ -22,7 +22,7 @@ AutoOps RAG 将文档解析、混合检索、证据判断、生成、引用校�
 
 ## 技术栈
 
-Python 3.11、FastAPI、LangGraph、MCP Python SDK、Qdrant、BGE/FastEmbed、BM25、RRF、PyMuPDF、SQLite、React、TypeScript、Vite、Docker Compose、Pytest。
+Python 3.11、FastAPI、LangGraph、MCP Python SDK、Qdrant、BGE/FastEmbed、BM25、RRF、PyMuPDF、SQLite、SQLAlchemy 2.x、Alembic、可选 PostgreSQL、React、TypeScript、Vite、Docker Compose、Pytest。
 
 ## 核心能力
 
@@ -39,6 +39,7 @@ Python 3.11、FastAPI、LangGraph、MCP Python SDK、Qdrant、BGE/FastEmbed、BM
 | 有界迭代检索 | 可选二次检索，受轮数、Rewrite、工具、LLM 和超时预算控制；默认关闭 |
 | 可观测性 | Trace 记录检索候选、证据评估、候选计划、工具调用、预算、停止原因、模型和延迟 |
 | Web 演示 | 新增 React + TypeScript 页面和 workflow SSE，可实时展示节点进度及最终 Answer、Citation、Evidence、Trace；原生 HTML/JavaScript 页面继续保留 |
+| 运行数据 | Conversation、Feedback、Verified Solution、Trace metadata 和 Evaluation record 通过独立 Repository 接口访问；默认 SQLite，可选 PostgreSQL |
 | 工程化 | FastAPI、Docker、模型 fallback、限流、自动化测试和多套离线评测脚本 |
 
 ## 系统架构
@@ -57,7 +58,7 @@ flowchart LR
     SAFE -->|"accepted"| SHADOW["Intent + Router + Planner (Shadow)"]
     SHADOW --> FIXED["Fixed Routing"]
     FIXED --> TOOL["Tool Registry"]
-    TOOL --> RET["Hybrid Retrieval / SQLite / Document Page"]
+    TOOL --> RET["Hybrid Retrieval / Static SQLite / Document Page"]
     RET --> D["Qdrant / BGE"]
     RET --> B["BM25"]
     D --> RRF["RRF + Light Rerank"]
@@ -68,11 +69,16 @@ flowchart LR
     RW -.-> RET
     GEN --> CG["Citation Guard"]
     CG --> OUT["Answer + Evidence"]
+    SVC --> REPO["Runtime Repository Interfaces"]
+    REPO --> RSQL["SQLite (default)"]
+    REPO --> PG["PostgreSQL (optional)"]
     G --> TRACE["RAG Trace"]
     TOOL --> TRACE
     RET --> TRACE
     EG --> TRACE
     CG --> TRACE
+    TRACE --> JSONL["Full sanitized JSONL"]
+    TRACE --> REPO
 ```
 
 详细模块和边界见 `docs/architecture.md`。
@@ -213,6 +219,63 @@ stdio Server 启动后会等待 MCP Client 通过标准输入/输出通信，不
 
 当前边界：只实现本地 stdio transport，没有远程 HTTP MCP、认证、TLS 或多租户隔离；`get_document_page` 仍受现有精确文档匹配和页码约束，不能读取任意文件。Planner/Router 仍为 shadow，LangGraph 直接调用 Tool Registry，不通过 MCP 回调自身。因此系统仍不是 fully autonomous Agent，也不代表生产级远程 MCP 部署。
 
+## Runtime Repository 与 PostgreSQL
+
+阶段 D 只抽象运行型数据，不把整个项目强制迁到 PostgreSQL：
+
+| 存储 | 当前职责 |
+|---|---|
+| Qdrant | Dense 向量检索；不迁 pgvector |
+| SQLite 静态知识 | `alarm_codes`、`parameters`、`kg_nodes`、`kg_edges` 和可选手册表格行 |
+| Runtime Repository | `conversation_memory`、`conversation_turns`、`answer_feedback`、`verified_solutions`、`solution_reuse_events`、`trace_metadata`、`evaluation_runs`、`evaluation_records` |
+| JSONL / Markdown | 完整脱敏 RAG Trace 和离线评测报告，继续保留 |
+
+运行数据由 `ConversationRepository`、`FeedbackRepository`、`VerifiedSolutionRepository`、`TraceRepository` 和 `EvaluationRepository` 分责；SQLAlchemy 实现使用短生命周期 Session，每次事务结束都会 commit 或 rollback 并关闭 Session。Service 和 Graph 不直接持有 ORM Session，也不写 SQL。
+
+默认配置不需要 PostgreSQL：
+
+```text
+DATABASE_BACKEND=sqlite
+POSTGRES_DSN=
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=10
+DATABASE_POOL_TIMEOUT_SECONDS=30
+DATABASE_CONNECT_TIMEOUT_SECONDS=3
+```
+
+SQLite 默认继续使用 `storage/autoops.db`，但静态知识与运行数据已由不同 class 管理，因此旧本地数据不需要强制搬迁。切换 PostgreSQL 时只切换运行数据：
+
+```powershell
+$env:DATABASE_BACKEND = "postgres"
+$env:POSTGRES_DSN = "postgresql+psycopg://autoops:autoops-local-only@127.0.0.1:5432/autoops"
+```
+
+PostgreSQL schema 由 Alembic 管理，应用不会在 PostgreSQL 上自动 `create_all`：
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic current
+.\.venv\Scripts\python.exe -m alembic downgrade -1
+```
+
+`downgrade` 会删除运行型表，应只在确认可丢弃对应运行数据时执行。Initial migration 不迁移或删除现有 SQLite 数据，也不涉及 alarm、parameter、KG、Qdrant 或文档 chunks。
+
+可选 Docker PostgreSQL 使用独立 override，不影响默认 Compose：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d postgres
+$env:DATABASE_BACKEND = "postgres"
+$env:POSTGRES_DSN = "postgresql+psycopg://autoops:autoops-local-only@127.0.0.1:5432/autoops"
+.\.venv\Scripts\python.exe -m alembic upgrade head
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build -d
+```
+
+`/health` 和 `/api/index/status` 会分别返回 `database_backend`、`database_status` 与脱敏的 `database_error_type`。运行数据库短暂不可用时，会话上下文、会话写入和 Trace metadata 会降级，不阻断静态手册检索；显式 Feedback/Verified Solution 写入仍会返回失败，不能伪装成已保存。
+
+Trace 采用“数据库 metadata + JSONL 完整 payload”：Repository 保存 `request_id`、时间、`session_id`、状态、错误、query/rewrite、工具、模型、延迟、token usage 和 stop reason；完整 retrieval candidates/evidence 继续写脱敏 JSONL。Formal evaluation 仍生成原 JSON/Markdown，同时写 evaluation run/record metadata，不改变指标口径。
+
+当前 PostgreSQL 支持是单实例、同步 SQLAlchemy 和基础连接池方案，不包含高可用、备份恢复、读写分离、远程密钥管理或生产级运维承诺。
+
 ## 测试与评测
 
 全部测试与 formal 数据校验：
@@ -268,13 +331,14 @@ MAX_LLM_CALLS=2
 AGENT_TIMEOUT_SECONDS=60
 TOOL_TIMEOUT_SECONDS=30
 MAX_REWRITES=1
+DATABASE_BACKEND=sqlite
 ```
 
 因此默认 API 不会让 Agentic Router、Planner 或 Iterative Retrieval 接管主流程。即使启用 Router 或 Planner 的配置开关，当前代码也只产生 shadow trace。固定 Graph 的真实工具调用已受 Registry 的 `max_tool_calls` 和单工具 timeout 约束；其他 Agent budget 字段继续约束迭代检索和生成阶段。
 
 ## 当前评测摘要
 
-- Pytest：136 项通过。
+- Pytest：146 项通过，1 项 PostgreSQL integration test 因未配置专用测试 DSN 而跳过；原有 136 项全部保留并通过。
 - Formal validation：60 题，0 validation errors；由于官方资料占比和独立复核数量尚未达到门槛，`ready_for_resume_accuracy_claim=false`。
 - Ranking-only development：Strict Recall@5 1.0000、MRR@5 0.9343、nDCG@5 0.9377、Top1 Accuracy 0.8857。
 - Agentic shadow：24 个 overlay case，Intent/Tool/Plan Valid 均为 1.0000；Budget/Whitelist/Loop Violation 均为 0。
@@ -292,6 +356,7 @@ Shadow 评测的 100% 只表示规则分类和候选计划符合 overlay 预期�
 - Iterative development 集校准后没有触发真实二次检索，证明了误触发减少，但仍需补充 retry-positive 数据验证召回收益。
 - SQLite 工具记录如果不能映射到可靠 `source/page/chunk_id`，只能作为候选信息，不能伪装成可引用事实。
 - SSE 当前提供工作流阶段事件，不提供逐 token 输出；客户端断开不能强制终止已经进入底层线程的同步 I/O。
+- PostgreSQL 是可选运行数据 backend；完整 Trace 仍依赖本地 JSONL，尚不适合无共享文件系统的多实例部署。
 - 延迟来自本地 Windows 环境，会随硬件、缓存、模型和 Qdrant 状态变化。
 
 ## 项目结构
@@ -304,12 +369,15 @@ autoops-rag/
 │  ├─ retrieval/      # Dense、BM25、RRF、rerank
 │  ├─ generation/     # 模型调用、fallback、Citation Guard
 │  ├─ mcp/            # 本地 stdio MCP 协议适配层
+│  ├─ repositories/   # 运行数据接口与 SQLAlchemy SQLite/PostgreSQL 实现
 │  ├─ api.py          # FastAPI 接口
 │  ├─ service.py      # 服务编排
 │  └─ tracing.py      # Trace 脱敏与持久化
 ├─ data/eval/         # Formal 与 Agentic overlay 数据
 ├─ docs/              # 架构、评测、Trace 和面试材料
 ├─ frontend/          # React + TypeScript + Vite Workflow Demo
+├─ alembic/           # 运行型表 schema migration
+├─ docker-compose.postgres.yml # 可选 PostgreSQL override
 ├─ reports/           # 审计与评测报告
 ├─ examples/          # 本地 MCP Client 示例
 ├─ scripts/           # 初始化、启动、索引和评测脚本

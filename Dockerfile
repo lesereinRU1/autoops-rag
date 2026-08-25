@@ -18,6 +18,8 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 COPY static ./static
 COPY scripts ./scripts
 

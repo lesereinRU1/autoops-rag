@@ -24,5 +24,8 @@ tests
 docs
 outputs
 work
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
 *.log
 *.csv

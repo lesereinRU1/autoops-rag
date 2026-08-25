@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -19,14 +20,24 @@ from app.ingestion.pipeline import ingest_corpus
 from app.models import ChatRequest, ChatResponse, Chunk, FeedbackRequest, SearchHit, VerifiedSolutionRequest
 from app.retrieval.hybrid import HybridRetriever
 from app.retrieval.query_expansion import technical_terms
+from app.repositories import create_runtime_database_from_settings
 from app.safety import is_unsafe_operation_request
 from app.tracing import TraceStore
+
+
+LOGGER = logging.getLogger("autoops.service")
 
 
 class AutoOpsService:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.memory = MemoryStore(self.settings.sqlite_path, self.settings.data_dir / "seed")
+        self.memory = MemoryStore(
+            self.settings.sqlite_path,
+            self.settings.data_dir / "seed",
+            initialize_runtime=False,
+        )
+        self.runtime_database = create_runtime_database_from_settings(self.settings)
+        self.memory.attach_runtime_repositories(self.runtime_database.repositories)
         self.generator = AnswerGenerator(self.settings)
         self.retriever = HybridRetriever(self.settings)
         self._chunk_by_id = self._load_chunk_map()
@@ -248,21 +259,30 @@ class AutoOpsService:
         generation_usage = state.get("generation_usage", {})
         evidence = state.get("evidence", [])
         source_chunk_ids = [hit.chunk.chunk_id for hit in evidence]
-        self.memory.save_session(
-            request.session_id,
-            request.model,
-            request.version,
-            f"Q: {original_question}\nA: {state['answer']}",
-        )
-        self.memory.save_turn(
-            request.session_id,
-            request.model,
-            request.version,
-            original_question,
-            state["answer"],
-            selected_tool,
-            source_chunk_ids,
-        )
+        try:
+            self.memory.save_session(
+                request.session_id,
+                request.model,
+                request.version,
+                f"Q: {original_question}\nA: {state['answer']}",
+            )
+            self.memory.save_turn(
+                request.session_id,
+                request.model,
+                request.version,
+                original_question,
+                state["answer"],
+                selected_tool,
+                source_chunk_ids,
+            )
+        except Exception as exc:
+            # Runtime persistence is an optional enhancement. Retrieval and
+            # grounded answer generation remain available during a DB outage.
+            LOGGER.warning(
+                "runtime conversation persistence failed request_id=%s error_type=%s",
+                request_id,
+                type(exc).__name__,
+            )
         total_ms = round((time.perf_counter() - started) * 1000, 2)
         fallback_reason = generation_usage.get("fallback_reason", "")
         attempted_models = list(generation_usage.get("attempted_models", []))
@@ -275,6 +295,7 @@ class AutoOpsService:
         retrieval_trace = state.get("retrieval_trace", {})
         rag_trace = {
             "request_id": request_id,
+            "session_id": request.session_id,
             "created_at": datetime.now().astimezone().isoformat(timespec="milliseconds"),
             "original_question": original_question,
             "device_model": request.model,
@@ -320,6 +341,30 @@ class AutoOpsService:
             "retrieval_rounds": state.get("retrieval_rounds_trace", []),
         }
         rag_trace = self.traces.append(rag_trace)
+        try:
+            runtime_database = getattr(self, "runtime_database", None)
+            if runtime_database is not None:
+                runtime_database.repositories.traces.append_metadata(
+                    {
+                        **rag_trace,
+                        "status": "refused" if rag_trace["refused"] else "completed",
+                        "error": "",
+                        "query": original_question,
+                        "model": rag_trace["llm_model"],
+                        "provider": generation_usage.get("provider", ""),
+                        "token_usage": {
+                            "input_tokens": rag_trace.get("input_tokens"),
+                            "output_tokens": rag_trace.get("output_tokens"),
+                            "total_tokens": rag_trace.get("total_tokens"),
+                        },
+                    }
+                )
+        except Exception as exc:
+            LOGGER.warning(
+                "trace metadata persistence failed request_id=%s error_type=%s",
+                request_id,
+                type(exc).__name__,
+            )
         return ChatResponse(
             request_id=request_id,
             answer=state["answer"],
@@ -407,6 +452,7 @@ class AutoOpsService:
             chunk for chunk in self._chunk_by_id.values()
             if chunk.metadata.get("representation") == "table_row"
         ]
+        database_health = self.runtime_database.health()
         return {
             "embedding_backend": self.retriever.vector.backend_name,
             "embedding_model": self.settings.embedding_model,
@@ -435,9 +481,16 @@ class AutoOpsService:
             ),
             "llm_model": self.settings.llm_primary_model,
             "llm_model_fallbacks": self.settings.llm_model_candidates[1:],
+            "database_backend": database_health["backend"],
+            "database_status": database_health["status"],
+            "database_error_type": database_health["error_type"],
         }
 
     def close(self) -> None:
         with self.access.write():
             self.tool_registry.close()
             self.retriever.close()
+            self.memory.close()
+            runtime_database = getattr(self, "runtime_database", None)
+            if runtime_database is not None:
+                runtime_database.close()

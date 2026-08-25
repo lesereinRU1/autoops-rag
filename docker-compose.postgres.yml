@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: autoops
+      POSTGRES_USER: autoops
+      POSTGRES_PASSWORD: autoops-local-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoops -d autoops"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    environment:
+      DATABASE_BACKEND: postgres
+      POSTGRES_DSN: postgresql+psycopg://autoops:autoops-local-only@postgres:5432/autoops
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

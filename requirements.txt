@@ -13,3 +13,6 @@ numpy==2.2.6
 mcp==2.0.0
 # Keep the MCP HTTP extra compatible with FastAPI 0.115.x; stdio does not use it.
 sse-starlette==3.0.2
+SQLAlchemy==2.0.52
+alembic==1.19.1
+psycopg[binary]==3.3.4

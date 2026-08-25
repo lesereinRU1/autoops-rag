@@ -220,6 +220,7 @@ class RuntimeStats(BaseModel):
 
 class RagTraceResponse(BaseModel):
     request_id: str
+    session_id: str = ""
     created_at: str
     original_question: str
     device_model: str
@@ -347,6 +348,9 @@ class IndexStatusResponse(BaseModel):
     llm_enabled: bool = Field(description="是否配置外部大语言模型")
     llm_model: str = Field(description="配置的外部大语言模型名称")
     llm_model_fallbacks: list[str] = Field(default_factory=list, description="按顺序备用的外部模型")
+    database_backend: str = Field(default="sqlite", description="运行型数据后端")
+    database_status: str = Field(default="ok", description="运行型数据库依赖状态")
+    database_error_type: str = Field(default="", description="数据库不可用时的异常类型，不含凭据或连接串")
 
 
 class HealthResponse(IndexStatusResponse):

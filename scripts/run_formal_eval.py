@@ -23,6 +23,8 @@ if str(ROOT) not in sys.path:
 
 from scripts.llm_smoke_test import evaluate_claims, extract_cited_chunk_ids
 from app.safety import classify_forbidden_facts, unsafe_response_violations
+from app.config import get_settings
+from app.repositories import create_runtime_database_from_settings
 from app.tracing import sanitize_trace
 from app.evaluation.required_fact_checker import diagnose_required_fact
 from scripts.validate_formal_eval import (
@@ -192,6 +194,63 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def persist_evaluation_metadata(report: dict[str, Any]) -> bool:
+    """Persist queryable run/record metadata without replacing JSON reports."""
+    if report.get("status") != "completed" or not report.get("run_id"):
+        return False
+    database = create_runtime_database_from_settings(get_settings())
+    try:
+        repository = database.repositories.evaluations
+        run_id = repository.create_run(
+            "formal_evaluation",
+            run_id=str(report["run_id"]),
+            metadata={
+                "generated_at": report.get("generated_at"),
+                "dataset": report.get("dataset", {}),
+                "ready_for_resume_accuracy_claim": report.get(
+                    "ready_for_resume_accuracy_claim", False
+                ),
+            },
+        )
+        metric_fields = (
+            "strict_recall@5",
+            "reciprocal_rank@5",
+            "ndcg@5",
+            "top1_correct",
+            "citation_chunk_valid",
+            "refused",
+            "retrieval_latency_ms",
+            "llm_latency_ms",
+            "total_latency_ms",
+            "wall_latency_ms",
+        )
+        for item in report.get("details", []):
+            repository.save_record(
+                run_id,
+                str(item.get("id", "unknown")),
+                category=str(item.get("category", "")),
+                status=(
+                    "completed" if item.get("http_status") == 200 else "error"
+                ),
+                metrics={
+                    key: item.get(key)
+                    for key in metric_fields
+                    if key in item
+                },
+                error=str(item.get("error_type", "")),
+            )
+        repository.complete_run(
+            run_id,
+            summary={
+                "metrics": report.get("metrics", {}),
+                "metric_denominators": report.get("metric_denominators", {}),
+            },
+        )
+        return True
+    finally:
+        database.close()
 
 
 def main() -> int:
@@ -575,6 +634,14 @@ def main() -> int:
     report = sanitize_trace(report)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     markdown_output.write_text(render_markdown_report(report), encoding="utf-8")
+    try:
+        persist_evaluation_metadata(report)
+    except Exception as exc:
+        print(
+            "warning: evaluation metadata persistence failed "
+            f"error_type={type(exc).__name__}",
+            file=sys.stderr,
+        )
     print(
         json.dumps(
             {

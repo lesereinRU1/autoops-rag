@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -57,6 +58,12 @@ class Settings(BaseSettings):
     agent_timeout_seconds: float = 60.0
     tool_timeout_seconds: float = 30.0
     max_rewrites: int = 1
+    database_backend: Literal["sqlite", "postgres"] = "sqlite"
+    postgres_dsn: str = ""
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+    database_pool_timeout_seconds: float = 30.0
+    database_connect_timeout_seconds: float = 3.0
 
     @property
     def llm_primary_model(self) -> str:

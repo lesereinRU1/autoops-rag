@@ -3,16 +3,40 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.repositories import RuntimeDatabase, RuntimeRepositories
 
 
 class MemoryStore:
-    def __init__(self, db_path: Path, seed_dir: Path) -> None:
+    """Static SQLite knowledge plus compatibility delegates for runtime repositories."""
+
+    def __init__(
+        self,
+        db_path: Path,
+        seed_dir: Path,
+        *,
+        runtime_repositories: "RuntimeRepositories | None" = None,
+        initialize_runtime: bool = True,
+    ) -> None:
         self.db_path = db_path
         self.seed_dir = seed_dir
+        self._runtime_repositories = runtime_repositories
+        self._owned_runtime_database: "RuntimeDatabase | None" = None
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
+        if self._runtime_repositories is None and initialize_runtime:
+            # Direct MemoryStore users retain the legacy behavior. AutoOpsService
+            # supplies the selected SQLite/PostgreSQL repository bundle instead.
+            from app.repositories import create_runtime_database
+
+            self._owned_runtime_database = create_runtime_database(
+                backend="sqlite",
+                sqlite_path=db_path,
+            )
+            self._runtime_repositories = self._owned_runtime_database.repositories
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
@@ -31,29 +55,6 @@ class MemoryStore:
                     name TEXT PRIMARY KEY, aliases TEXT, minimum REAL, maximum REAL,
                     unit TEXT, notes TEXT, model TEXT, source TEXT
                 );
-                CREATE TABLE IF NOT EXISTS conversation_memory (
-                    session_id TEXT PRIMARY KEY, model TEXT, version TEXT,
-                    summary TEXT, updated_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS conversation_turns (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
-                    model TEXT, version TEXT, question TEXT, answer TEXT,
-                    selected_tool TEXT, source_chunk_ids TEXT, created_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS verified_solutions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT, version TEXT,
-                    problem TEXT, solution TEXT, source_chunk_ids TEXT,
-                    confirmed_by TEXT, verified INTEGER, created_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS answer_feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT,
-                    question TEXT, answer TEXT, helpful INTEGER, reason TEXT,
-                    selected_tool TEXT, source_chunk_ids TEXT, created_at TEXT
-                );
-                CREATE TABLE IF NOT EXISTS solution_reuse_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, solution_id INTEGER,
-                    session_id TEXT, question TEXT, created_at TEXT
-                );
                 CREATE TABLE IF NOT EXISTS kg_nodes (
                     id TEXT PRIMARY KEY, type TEXT, label TEXT, aliases TEXT
                 );
@@ -67,6 +68,16 @@ class MemoryStore:
             self._seed_table(db, "parameters.json", "parameters")
             if db.execute("SELECT COUNT(*) FROM kg_nodes").fetchone()[0] == 0:
                 self._seed_graph(db)
+
+    def attach_runtime_repositories(
+        self, repositories: "RuntimeRepositories"
+    ) -> None:
+        self._runtime_repositories = repositories
+
+    def _runtime(self) -> "RuntimeRepositories":
+        if self._runtime_repositories is None:
+            raise RuntimeError("runtime repositories are not configured")
+        return self._runtime_repositories
 
     def _seed_table(self, db: sqlite3.Connection, filename: str, table: str) -> None:
         path = self.seed_dir / filename
@@ -133,12 +144,9 @@ class MemoryStore:
         return best
 
     def save_session(self, session_id: str, model: str, version: str, summary: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        with self.connect() as db:
-            db.execute(
-                "INSERT INTO conversation_memory VALUES (?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET model=excluded.model, version=excluded.version, summary=excluded.summary, updated_at=excluded.updated_at",
-                (session_id, model, version, summary[-2000:], now),
-            )
+        self._runtime().conversations.upsert_session(
+            session_id, model, version, summary
+        )
 
     def save_turn(
         self,
@@ -150,38 +158,21 @@ class MemoryStore:
         selected_tool: str,
         source_chunk_ids: list[str],
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        with self.connect() as db:
-            db.execute(
-                "INSERT INTO conversation_turns "
-                "(session_id,model,version,question,answer,selected_tool,source_chunk_ids,created_at) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (
-                    session_id,
-                    model,
-                    version,
-                    question,
-                    answer,
-                    selected_tool,
-                    json.dumps(source_chunk_ids, ensure_ascii=False),
-                    now,
-                ),
-            )
-            db.execute(
-                "DELETE FROM conversation_turns WHERE session_id=? AND id NOT IN "
-                "(SELECT id FROM conversation_turns WHERE session_id=? ORDER BY id DESC LIMIT 20)",
-                (session_id, session_id),
-            )
+        self._runtime().conversations.append_turn(
+            session_id,
+            model,
+            version,
+            question,
+            answer,
+            selected_tool,
+            source_chunk_ids,
+            max_turns=20,
+        )
 
     def recent_turns(self, session_id: str, limit: int = 2, ttl_hours: int = 24) -> list[dict]:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=ttl_hours)).isoformat()
-        with self.connect() as db:
-            rows = db.execute(
-                "SELECT * FROM conversation_turns "
-                "WHERE session_id=? AND created_at>=? ORDER BY id DESC LIMIT ?",
-                (session_id, cutoff, limit),
-            ).fetchall()
-        return [dict(row) for row in reversed(rows)]
+        return self._runtime().conversations.get_recent_turns(
+            session_id, limit=limit, ttl_hours=ttl_hours
+        )
 
     def build_followup_query(self, session_id: str, question: str) -> tuple[str, int]:
         text = question.strip()
@@ -194,7 +185,12 @@ class MemoryStore:
         )
         if not is_followup:
             return text, 0
-        turns = self.recent_turns(session_id, limit=2, ttl_hours=24)
+        try:
+            turns = self.recent_turns(session_id, limit=2, ttl_hours=24)
+        except Exception:
+            # Conversation context is optional. A temporary runtime database
+            # outage must not block static manual retrieval.
+            return text, 0
         if not turns:
             return text, 0
         prior_questions = [turn["question"][:240] for turn in turns]
@@ -212,24 +208,10 @@ class MemoryStore:
         return f"{history}\n当前追问：{text}", len(turns)
 
     def clear_session(self, session_id: str) -> int:
-        with self.connect() as db:
-            removed = db.execute(
-                "DELETE FROM conversation_turns WHERE session_id=?", (session_id,)
-            ).rowcount
-            db.execute("DELETE FROM conversation_memory WHERE session_id=?", (session_id,))
-        return int(removed)
+        return self._runtime().conversations.clear_session(session_id)
 
     def save_verified_solution(self, payload: dict) -> int:
-        now = datetime.now(timezone.utc).isoformat()
-        with self.connect() as db:
-            cursor = db.execute(
-                "INSERT INTO verified_solutions (model,version,problem,solution,source_chunk_ids,confirmed_by,verified,created_at) VALUES (?,?,?,?,?,?,1,?)",
-                (
-                    payload["model"], payload.get("version", ""), payload["problem"], payload["solution"],
-                    json.dumps(payload["source_chunk_ids"], ensure_ascii=False), payload.get("confirmed_by", "user"), now,
-                ),
-            )
-            return int(cursor.lastrowid)
+        return self._runtime().verified_solutions.save(payload)
 
     @staticmethod
     def _text_terms(text: str) -> set[str]:
@@ -289,14 +271,10 @@ class MemoryStore:
         query_terms = self._text_terms(question)
         if not query_terms:
             return None
-        with self.connect() as db:
-            rows = [
-                dict(row)
-                for row in db.execute(
-                    "SELECT * FROM verified_solutions WHERE verified=1 AND (model=? OR model='') ORDER BY id DESC LIMIT ?",
-                    (model, limit),
-                ).fetchall()
-            ]
+        try:
+            rows = self._runtime().verified_solutions.list_recent(model, limit)
+        except Exception:
+            return None
         best: dict | None = None
         best_score = 0.0
         for row in rows:
@@ -308,41 +286,25 @@ class MemoryStore:
         if best is None or best_score < 0.18:
             return None
         best["similarity"] = round(best_score, 4)
-        best["source_chunk_ids"] = json.loads(best["source_chunk_ids"] or "[]")
+        if isinstance(best.get("source_chunk_ids"), str):
+            best["source_chunk_ids"] = json.loads(best["source_chunk_ids"] or "[]")
         return best
 
     def record_solution_reuse(self, solution_id: int, session_id: str, question: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        with self.connect() as db:
-            db.execute(
-                "INSERT INTO solution_reuse_events (solution_id,session_id,question,created_at) VALUES (?,?,?,?)",
-                (solution_id, session_id, question, now),
-            )
+        self._runtime().verified_solutions.record_reuse(
+            solution_id, session_id, question
+        )
 
     def save_feedback(self, payload: dict) -> int:
-        now = datetime.now(timezone.utc).isoformat()
-        with self.connect() as db:
-            cursor = db.execute(
-                "INSERT INTO answer_feedback (session_id,question,answer,helpful,reason,selected_tool,source_chunk_ids,created_at) VALUES (?,?,?,?,?,?,?,?)",
-                (
-                    payload.get("session_id", "demo"), payload["question"], payload["answer"],
-                    int(payload["helpful"]), payload.get("reason", ""), payload.get("selected_tool", ""),
-                    json.dumps(payload.get("source_chunk_ids", []), ensure_ascii=False), now,
-                ),
-            )
-            return int(cursor.lastrowid)
+        return self._runtime().feedback.save(payload)
 
     def business_metrics(self) -> dict:
-        with self.connect() as db:
-            total = int(db.execute("SELECT COUNT(*) FROM answer_feedback").fetchone()[0])
-            helpful = int(db.execute("SELECT COUNT(*) FROM answer_feedback WHERE helpful=1").fetchone()[0])
-            verified = int(db.execute("SELECT COUNT(*) FROM verified_solutions WHERE verified=1").fetchone()[0])
-            reuse = int(db.execute("SELECT COUNT(*) FROM solution_reuse_events").fetchone()[0])
         return {
-            "feedback_total": total,
-            "helpful": helpful,
-            "unhelpful": total - helpful,
-            "helpful_rate": round(helpful / total, 4) if total else None,
-            "verified_solutions": verified,
-            "verified_solution_reuse": reuse,
+            **self._runtime().feedback.metrics(),
+            **self._runtime().verified_solutions.metrics(),
         }
+
+    def close(self) -> None:
+        if self._owned_runtime_database is not None:
+            self._owned_runtime_database.close()
+            self._owned_runtime_database = None
