@@ -1,5 +1,5 @@
 # 网络或模型下载受限时也能完整跑通；使用内置中文哈希向量。
-fastapi==0.115.14
+fastapi==0.139.0
 uvicorn[standard]==0.34.3
 qdrant-client==1.14.3
 PyMuPDF==1.26.1
