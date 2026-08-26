@@ -1,5 +1,7 @@
 # Ranking-only Evaluation
 
+> **Historical / stale / 历史版本结果。** 本报告使用旧 dataset hash `e251df9e...`，只保留为 development ranking 记录。
+
 > 本报告是 ranking-only eval，只评估检索排序，不调用外部 LLM，不调用 `/api/chat`，不生成答案，也不代表最终生成质量。
 
 - 运行模式：`local`

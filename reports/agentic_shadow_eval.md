@@ -1,5 +1,7 @@
 # Agentic Shadow Plan Evaluation
 
+> **Historical / stale / 历史版本结果。** 本报告是 Stage G 前 shadow-only overlay，不执行真实工具，不能代表当前受控 Planner 或最终问答质量；当前状态见 `docs/current-status.md`。
+
 > 本报告只评估影子Intent、候选工具与Bounded Planner，不代表最终问答准确率。
 
 - API调用：否

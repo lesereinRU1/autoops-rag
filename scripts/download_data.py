@@ -10,7 +10,8 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
-MANIFEST = RAW / "sources.json"
+PUBLIC_MANIFEST = ROOT / "data" / "sources.json"
+LOCAL_MANIFEST = RAW / "sources.json"
 
 
 def sha256(path: Path) -> str:
@@ -22,7 +23,8 @@ def sha256(path: Path) -> str:
 
 
 def download(include_optional: bool = False) -> None:
-    sources = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    RAW.mkdir(parents=True, exist_ok=True)
+    sources = json.loads(PUBLIC_MANIFEST.read_text(encoding="utf-8"))
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
         "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
@@ -45,7 +47,9 @@ def download(include_optional: bool = False) -> None:
                 print(f"完成：{target.name} ({target.stat().st_size / 1024 / 1024:.1f} MB)")
             source["bytes"] = target.stat().st_size
             source["sha256"] = sha256(target)
-    MANIFEST.write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Download sizes and hashes are machine-local run metadata. Keep them next
+    # to the ignored raw files instead of dirtying the versioned source list.
+    LOCAL_MANIFEST.write_text(json.dumps(sources, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

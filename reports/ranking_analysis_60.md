@@ -1,5 +1,7 @@
 # v22 Ranking Analysis — 60 题 Formal Eval
 
+> **Historical / stale / 历史版本结果。** 本文保留旧 ranking 诊断，当前 dataset/hash/指标见 `docs/current-status.md`。
+
 > 本报告是 bad case 分析，不是排序优化结果。分析期间未修改业务代码、评测集、`gold_chunk_ids`、Prompt 或检索配置，也未调用外部 LLM。
 
 ## 1. 数据范围与口径
@@ -172,4 +174,3 @@ exact coverage 只有 15.57%，不能直接解释为模型仅答对 15.57%。84 
 - `formal_057` 的 Top1 和 MRR 均正确，核心问题更像题目只问 16#80C8、但 gold/required facts 扩展到 16#809A。
 - `formal_060` 的 gold 与题意匹配，缺失 16#809A chunk，优先调查复合 query 的子意图召回；在没有候选 rank 前不应直接归因 rerank。
 - required fact 偏低同时包含 checker 过严、真实漏答、复合标签和 gold 不对齐，不能只靠调排序解决。
-

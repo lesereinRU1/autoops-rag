@@ -43,6 +43,38 @@ export interface RuntimeStats {
   generation_fallback_reason: string;
 }
 
+export interface PlanStep {
+  step_id: number;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  reason: string;
+  expected_evidence: string;
+}
+
+export interface Plan {
+  intent: string;
+  steps: PlanStep[];
+  allow_generation: boolean;
+  need_evidence_gate: boolean;
+  max_rounds: number;
+  max_tool_calls: number;
+}
+
+export interface ToolCallTraceRecord {
+  tool_name?: string;
+  arguments?: Record<string, unknown>;
+  result_count?: number;
+  latency_ms?: number;
+  executed?: boolean;
+  reused?: boolean;
+  deduplicated?: boolean;
+  success?: boolean;
+  error?: string;
+  round?: number;
+  planner_round?: number;
+  remaining_budget?: Record<string, unknown>;
+}
+
 export interface RagTrace {
   request_id: string;
   created_at: string;
@@ -76,9 +108,9 @@ export interface RagTrace {
   evidence_sufficient: boolean;
   warnings: string[];
   intent: Record<string, unknown>;
-  plan: Record<string, unknown> | Record<string, unknown>[];
+  plan: Plan | Record<string, unknown> | Record<string, unknown>[];
   candidate_plan: string[];
-  tool_calls: Record<string, unknown>[];
+  tool_calls: ToolCallTraceRecord[];
   rounds: number;
   budget: Record<string, unknown>;
   stop_reason: string;
@@ -86,6 +118,11 @@ export interface RagTrace {
   rewrite_triggered: boolean;
   rewritten_queries: string[];
   retrieval_rounds: Record<string, unknown>[];
+  planner_attempted: boolean;
+  planner_applied: boolean;
+  planner_fallback: boolean;
+  planner_fallback_reason: string;
+  planner_round: number;
 }
 
 export interface ChatResponse {

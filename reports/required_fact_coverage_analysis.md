@@ -1,5 +1,7 @@
 # Required Fact Coverage 诊断报告
 
+> **Historical / stale / 历史版本诊断。** 当前 Required Fact Coverage 口径和数值见 `reports/formal_evaluation.*` 与 `docs/current-status.md`。
+
 ## 结论
 
 本次分析起点为 `required_fact_coverage = 0.1518`；按验收要求重跑后最新值为 **0.1607**。

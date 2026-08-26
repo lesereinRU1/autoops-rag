@@ -1,5 +1,7 @@
 # Runtime Benchmark
 
+> **Historical / stale / 历史版本结果。** 延迟受硬件、缓存、corpus 和配置影响，不代表当前或通用性能承诺。
+
 - 场景：`chat_with_local_extractive_generation`
 - 接口：`/api/chat`
 - 外部 LLM 纳入压测：`false`

@@ -98,10 +98,10 @@ export default function App() {
       )}
 
       <div className="main-grid">
-        <WorkflowTimeline events={events} />
+        <WorkflowTimeline events={events} response={response} />
         <div className="result-stack">
           <AnswerPanel response={response} />
-          <CitationPanel evidence={response?.evidence ?? []} />
+          <CitationPanel response={response} />
           <EvidencePanel evidence={response?.evidence ?? []} />
           <TracePanel response={response} />
         </div>

@@ -1,9 +1,11 @@
 # AutoOps RAG 面试讲解笔记
 
+> 当前数字与能力边界以 `docs/current-status.md` 为准。Stage G 前 shadow-only、旧 dataset hash 和旧 corpus 数量只作为 Historical / stale / 历史版本结果讨论。
+
 ## 项目亮点
 
 1. **问题真实具体：** 工业手册中的精确故障码、参数表、版本和跨章节流程，不是通用聊天场景。
-2. **数据处理可量化：** 16,969 个切片、12,035 个表格行、1,861 张表均来自现有审计报告。
+2. **数据处理可量化：** 当前 canonical corpus 为 16,945 个切片，其中 12,011 个表格行覆盖 1,856 张表；corpus hash 已写入正式报告。
 3. **检索不是单一路径：** Dense + BM25 + RRF + rerank，同时覆盖语义改写与精确标识。
 4. **生成有前后门控：** Evidence Gate 决定是否允许生成，Citation Guard 校验引用是否属于本次证据。
 5. **Agentic 但可控：** Intent、Router、Planner、工具和 iterative controller 都有白名单、预算、stop reason 和 Trace。
@@ -45,8 +47,9 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 ## 推荐说法
 
 - “这是基于 LangGraph 的受控 Agentic RAG，默认走固定流程，开启 feature flag 后只执行确定性白名单计划。”
-- “在 35 道 development ranking-only 题上，Strict Recall@5 为 1.0，MRR@5 为 0.9343。”
-- “Shadow Plan Valid 的 100% 只表示结构、预算和循环约束有效，不代表最终问答准确率。”
+- “当前 `formal_eval_v1` test split 有 20 题；Strict Recall@5 为 0.8667，Citation Correctness 为 0.9286，但样本和官方来源占比不足，只用于工程诊断。”
+- “本次 canonical E2E 使用 `local_extractive` 且 `LLM_ENABLED=false`，不能当作外部 LLM Answer Quality。”
+- “历史 Shadow Plan Valid 的 100% 只表示结构、预算和循环约束有效，不代表最终问答准确率；Stage G 后 Planner 已可在 feature flag 下受控执行。”
 - “Evidence Gate 和 Citation Guard 分别约束生成前证据与生成后引用。”
 - “迭代检索默认关闭，开启时有轮数、工具、LLM、Rewrite 和超时预算。”
 - “结构化工具没有可靠 provenance 时不能直接作为最终事实。”
@@ -69,7 +72,7 @@ ToolResult 区分 content、evidence、provenance 和 metadata。SQLite 命中�
 2. 再讲文档解析和 Hybrid Retrieval；
 3. 用 Evidence Gate / Citation Guard 解释为什么不直接交给 LLM；
 4. 用受控 Planner、Registry 白名单、去重和 budget 解释“轻量级 Agentic”；
-5. 最后展示 Trace 和三套互相隔离的评测；
+5. 最后展示 Trace、当前 canonical formal report，以及明确标记为 historical 的 shadow/iterative 诊断材料；
 6. 主动交代数据规模、readiness 和未完成项。
 
 ## 面试现场可画的最小流程

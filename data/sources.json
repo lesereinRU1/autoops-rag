@@ -1,0 +1,80 @@
+[
+  {
+    "filename": "siemens_modbus_tcp_s7_1200_s7_1500.pdf",
+    "title": "Modbus/TCP with MB_CLIENT and MB_SERVER",
+    "manufacturer": "Siemens",
+    "model": "S7-1200",
+    "version": "V3.0 / 07-2019",
+    "url": "https://cache.industry.siemens.com/dl/files/340/102020340/att_118119/v6/net_modbus_tcp_s7-1500_s7-1200_en.pdf",
+    "ingest": true,
+    "released_at": "2019-07",
+    "checked_at": "2026-06-27",
+    "status": "active-special-topic",
+    "license_note": "Siemens 官方公开下载资料；版权归原权利人，仓库仅保存来源元数据，不分发原始文件。"
+  },
+  {
+    "filename": "siemens_s7_1200_system_manual_v4_6.pdf",
+    "title": "S7-1200 Programmable Controller System Manual V4.6",
+    "manufacturer": "Siemens",
+    "model": "S7-1200",
+    "version": "V4.6 / 11-2022",
+    "url": "https://cache.industry.siemens.com/dl/files/829/109814829/att_1120874/v1/s71200_system_manual_en-US_en-US.pdf",
+    "ingest": true,
+    "released_at": "2022-11",
+    "checked_at": "2026-06-27",
+    "status": "superseded-but-retained-until-v4.7-download-refresh",
+    "license_note": "Siemens 官方公开下载资料；版权归原权利人，仓库仅保存来源元数据，不分发原始文件。"
+  },
+  {
+    "filename": "siemens_s7_1200_system_manual_v4_7_zh.pdf",
+    "title": "S7-1200 可编程控制器系统手册 V4.7（中文）",
+    "manufacturer": "Siemens",
+    "model": "S7-1200",
+    "version": "V4.7 / 12-2024",
+    "url": "https://cache.industry.siemens.com/dl/files/302/109977302/att_1307509/v1/s71200_system_manual_zh-CHS.pdf",
+    "ingest": false,
+    "released_at": "2024-12",
+    "checked_at": "2026-06-27",
+    "status": "current-download-link-needs-refresh",
+    "license_note": "Siemens 官方公开下载资料；版权归原权利人，仓库仅保存来源元数据，不分发原始文件。"
+  },
+  {
+    "filename": "siemens_s7_1200_g2_system_manual_2025_zh.pdf",
+    "title": "S7-1200 G2 可编程控制器系统手册（中文）",
+    "manufacturer": "Siemens",
+    "model": "S7-1200 G2",
+    "version": "V1.0.1 / 04-2025",
+    "url": "https://cache.industry.siemens.com/dl/files/293/109988293/att_1327516/v1/S71200_G2_system_manual_zh-CHS_zh-CHS.pdf",
+    "ingest": true,
+    "released_at": "2025-04",
+    "checked_at": "2026-06-27",
+    "status": "current-manual-known-2025-product-update-exists",
+    "license_note": "Siemens 官方公开下载资料；版权归原权利人，仓库仅保存来源元数据，不分发原始文件。"
+  },
+  {
+    "filename": "siemens_s7_1200_system_manual_v4_7_en.pdf",
+    "title": "S7-1200 Programmable Controller System Manual V4.7",
+    "manufacturer": "Siemens",
+    "model": "S7-1200",
+    "version": "V4.7 / 12-2024",
+    "url": "https://cache.industry.siemens.com/dl/files/302/109977302/att_1307432/v1/s71200_system_manual_en-US.pdf",
+    "ingest": false,
+    "released_at": "2024-12",
+    "checked_at": "2026-06-27",
+    "status": "current-optional-language",
+    "license_note": "英文对照版，默认不重复入库以控制索引大小。"
+  },
+  {
+    "filename": "siemens_s7_1200_easy_book.pdf",
+    "title": "S7-1200 Easy Book",
+    "manufacturer": "Siemens",
+    "model": "S7-1200",
+    "version": "01-2015",
+    "url": "https://support.industry.siemens.com/cs/attachments/39710145/s71200_easy_book_en-US_en-US.pdf",
+    "ingest": false,
+    "released_at": "2015-01",
+    "checked_at": "2026-06-27",
+    "status": "legacy-reference",
+    "license_note": "备用扩展语料，默认不入库以控制首次索引时间。"
+  }
+]

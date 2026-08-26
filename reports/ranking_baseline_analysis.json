@@ -1,4 +1,6 @@
 {
+  "report_status": "historical_stale",
+  "historical_notice": "旧 ranking baseline 诊断，不是当前 canonical formal evaluation。",
   "analysis_type": "ranking_baseline_analysis",
   "baseline_version": "post_gold_label_fix",
   "title": "Gold label fix 后的 ranking baseline",

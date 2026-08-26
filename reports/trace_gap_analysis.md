@@ -1,5 +1,7 @@
 # AutoOps RAG Trace / Runtime Gap Analysis
 
+> **Historical / stale / 历史版本分析。** 当前 Trace schema 和示例见 `docs/trace-example.md`。
+
 > 目的：检查当前一次 `/api/chat` 问答请求的返回结构、Trace 落盘结构及 `static/index.html` 展示情况。本报告只做静态代码与现有 `rag_traces.jsonl` 样本核对，不修改业务代码。
 
 ## 1. 检查范围
@@ -339,4 +341,3 @@ source_number, chunk_id, doc_name, page, section_path, text
 3. **注入、引用和拒答语义混在一起**：`used_chunk_ids` 不等于真实引用，`refused` 不区分 policy 与 evidence insufficient。
 
 页面已经能展示模型、token、总耗时、生成方式和注入证据，但大量后端已有字段仍未显示，特别是检索/LLM 分段耗时、候选明细、证据充分性和 warnings。
-

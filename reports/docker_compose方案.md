@@ -1,5 +1,7 @@
 # AutoOps RAG Docker Compose 方案
 
+> **Historical / stale / 历史版本材料。** 当前公开 Docker 前置条件和启动方式以 `README.md`、`操作手册.md` 为准。
+
 > 本报告只分析容器化方案。本轮未修改业务代码、评测数据、README，也未新增 Dockerfile、`docker-compose.yml` 或 `.dockerignore`。
 
 ## 1. 当前启动方式
@@ -145,7 +147,7 @@ QdrantClient(path=str(settings.qdrant_path))
 本地路径为：
 
 ```text
-D:\autoops-rag\storage\qdrant
+<repository-root>\storage\qdrant
 ```
 
 对应代码路径是项目根目录下的：
@@ -367,7 +369,7 @@ docker compose down -v   # 明确说明：会删除 Qdrant、processed、model c
 
 ### 5.1 Windows 路径
 
-当前 PowerShell 脚本硬编码 `D:\autoops-rag`，不能直接在 Linux 容器中运行。Compose 应使用容器路径 `/app`，并直接执行 Python/Uvicorn 命令，不调用 `start.ps1`、`start_background.ps1` 或 `setup_d_drive.ps1`。
+当时的 PowerShell helper 硬编码本地目录，不能直接在 Linux 容器中运行。Compose 应使用容器路径 `/app`，并直接执行 Python/Uvicorn 命令，不调用这些本地 helper。
 
 宿主 bind mount 使用相对路径：
 
@@ -376,7 +378,7 @@ volumes:
   - ./data/raw:/app/data/raw:ro
 ```
 
-这样从 `D:\autoops-rag` 执行 Compose 时由 Docker Desktop 解析路径。需要确认 D 盘已允许 Docker Desktop 文件共享。中文文件名、长路径、CRLF shell 脚本和 NTFS 权限也应在实际实现时验证。
+这样从 repository root 执行 Compose 时由 Docker Desktop 解析路径。中文文件名、长路径、CRLF shell 脚本和 NTFS 权限也应在实际实现时验证。
 
 ### 5.2 Embedded Qdrant 多进程占用
 
@@ -567,4 +569,3 @@ docker compose down && docker compose up -> SQLite/Qdrant/processed 数据仍存
 - App 暴露 8000；Qdrant 6333 只在需要宿主调试时绑定，6334 当前不需要。
 - 原始 PDF、宿主 embedded storage、模型缓存和 `.env` 都不进入镜像，分别通过只读 bind mount、named volumes 和 runtime env 提供。
 - 真正的一键启动关键不是写出 Compose YAML，而是保证首次缺索引时能初始化、后续启动不会无条件重建，并确保 Qdrant 与 processed chunks 保持一致。
-

@@ -1,5 +1,7 @@
 # LLM与RAG Trace整改说明
 
+> **Historical / stale / 历史版本材料。** 本文保留用于说明历史整改过程，不代表当前代码、测试或 canonical evaluation；当前事实见 `docs/current-status.md`。
+
 ## 本次修改
 
 - 外部模型成功时统一记录`llm_grounded`；禁用、超时、接口错误、空响应和格式异常时降级为`local_extractive`并记录明确原因。
@@ -32,7 +34,7 @@
 ## 复测命令
 
 ```powershell
-Set-Location D:\autoops-rag
+Set-Location <repository-root>
 .\scripts\start_background.ps1
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe .\scripts\smoke_llm.py

@@ -1,5 +1,7 @@
 # Formal Evaluation Report
 
+> **Historical / stale / 历史版本结果。** 本报告早于当前 End-to-End schema，不是当前 canonical report；当前结果只读取 `reports/formal_evaluation.json` 与 `.md`。
+
 > 当前正式集仍未达到 readiness 门槛时，本报告只能用于开发诊断，不能作为简历准确率宣传。
 
 ## Core metrics

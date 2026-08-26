@@ -1,5 +1,7 @@
 # Iterative Retrieval A/B Evaluation
 
+> **Historical / stale / 历史版本结果。** 本报告使用旧 dataset hash，只用于解释 iterative development 过程，不代表当前 canonical formal evaluation。
+
 > This report evaluates retrieval evidence only. It does not call an LLM or measure final answer accuracy.
 
 - Split: `development`

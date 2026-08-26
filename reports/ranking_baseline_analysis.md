@@ -1,5 +1,7 @@
 # Gold Label Fix 后的 Ranking Baseline
 
+> **Historical / stale / 历史版本结果。** 本报告不是当前 canonical evaluation，不能作为当前检索或回答指标。
+
 > 本报告是修正 `formal_027`、`formal_028` 人工 gold 标注后的 ranking baseline，不是排序优化。本轮没有运行检索、调用外部 LLM，或修改检索代码、Prompt 和 gold。
 
 ## 当前检索指标

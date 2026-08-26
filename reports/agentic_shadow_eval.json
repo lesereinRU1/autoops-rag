@@ -1,10 +1,12 @@
 {
+  "report_status": "historical_stale",
+  "historical_notice": "Stage G 前 shadow-only overlay；不代表当前受控 Planner 或最终问答质量。当前事实见 docs/current-status.md。",
   "evaluation_type": "agentic_shadow_plan_eval",
   "generated_at": "2026-07-05T22:33:25+08:00",
   "dataset": {
-    "file": "D:\\autoops-rag\\data\\eval\\agentic_cases.jsonl",
+    "file": "data/eval/agentic_cases.jsonl",
     "sha256": "d00a027c33ed328df22437f5effacaae75db4bc1f9b1ded0587b54f651cf39de",
-    "schema": "D:\\autoops-rag\\data\\eval\\agentic_cases.schema.json",
+    "schema": "data/eval/agentic_cases.schema.json",
     "intent_distribution": {
       "alarm_diagnosis": 3,
       "parameter_lookup": 3,

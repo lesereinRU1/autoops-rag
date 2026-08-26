@@ -65,6 +65,16 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .timeline-title { display: flex; justify-content: space-between; gap: 10px; }
 .timeline-title time { color: #8b96a4; font: 11px "Cascadia Code", Consolas, monospace; }
 .timeline-item p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.audit-summary { margin: 0 0 20px; padding: 13px; border: 1px solid #cddbe3; border-radius: 12px; background: #f5f9fa; }
+.audit-heading { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.audit-heading strong { font-size: 13px; }
+.audit-heading small { color: var(--muted); font-size: 10px; }
+.audit-steps { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.audit-step { display: grid; grid-template-columns: 118px 1fr; gap: 8px; padding-left: 9px; border-left: 3px solid #aebbc6; font-size: 11px; }
+.audit-step strong { color: #26374a; }
+.audit-step span { color: var(--muted); overflow-wrap: anywhere; }
+.audit-step.tone-ok { border-color: #16865b; }
+.audit-step.tone-warn { border-color: var(--orange); }
 
 .answer-copy { padding: 18px; border-left: 3px solid var(--cyan); border-radius: 0 10px 10px 0; background: #f4f8f9; white-space: pre-wrap; line-height: 1.75; }
 .metric-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
@@ -102,6 +112,26 @@ pre { max-height: 280px; margin: 9px 0 0; padding: 12px; overflow: auto; color: 
 .trace-grid dd { margin: 0; font-family: "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
 .trace-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
 .trace-columns h3 { margin: 0; font-size: 14px; }
+.trace-section { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
+.trace-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 11px; }
+.trace-section-heading h3 { margin: 0; font-size: 15px; }
+.trace-section-heading span { color: var(--muted); font: 10px "Cascadia Code", Consolas, monospace; }
+.plan-stack, .tool-call-list { display: grid; gap: 10px; }
+.plan-step, .tool-call-row { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfd; }
+.plan-step > div { display: flex; align-items: center; gap: 8px; }
+.plan-step > div span { display: grid; place-items: center; width: 23px; height: 23px; color: white; border-radius: 6px; background: var(--blue); font: 600 11px "Cascadia Code", Consolas, monospace; }
+.plan-step p { margin: 8px 0 4px; color: #3f4c5d; font-size: 12px; }
+.plan-step small { color: var(--muted); }
+.plan-step pre { max-height: 150px; }
+.budget-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 0; }
+.budget-grid > div { min-width: 0; padding: 8px; border-radius: 8px; background: #f1f5f7; }
+.budget-grid dt { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.budget-grid dd { margin: 4px 0 0; color: #26374a; font: 11px "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
+.tool-call-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tool-call-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.tool-call-flags span { padding: 4px 6px; color: #526172; border-radius: 5px; background: #edf2f5; font: 10px "Cascadia Code", Consolas, monospace; }
+.tool-call-row details { margin-top: 9px; }
+.tool-call-row summary { color: var(--blue); cursor: pointer; font-size: 11px; }
 footer { display: flex; justify-content: space-between; gap: 18px; padding: 18px 4px 0; color: #667487; font-size: 12px; }
 
 @media (max-width: 880px) {
@@ -123,4 +153,7 @@ footer { display: flex; justify-content: space-between; gap: 18px; padding: 18px
   .evidence-list, .trace-content { padding: 0 17px 17px; }
   .trace-grid { grid-template-columns: 1fr; }
   .trace-grid dd { margin-bottom: 6px; }
+  .audit-heading, .tool-call-title { align-items: flex-start; flex-direction: column; }
+  .audit-step { grid-template-columns: 1fr; gap: 2px; }
+  .budget-grid { grid-template-columns: 1fr; }
 }

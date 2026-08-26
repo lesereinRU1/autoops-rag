@@ -1,5 +1,7 @@
 # 20题LLM Smoke Test报告
 
+> **Historical / stale / 历史版本结果。** 这是旧 LLM smoke run，不是当前 canonical evaluation，也不代表当前 provider 可用性或 Answer Quality。
+
 > 当前20题仅作为LLM smoke test / 回归测试，不作为正式准确率宣传。
 
 - 运行时间：2026-06-29T23:32:06+08:00

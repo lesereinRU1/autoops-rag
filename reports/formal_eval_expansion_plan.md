@@ -1,5 +1,7 @@
 # Formal Eval 60 题扩展计划
 
+> **Historical / stale / 历史版本计划。** 当前 frozen dataset、hash 和 canonical result 见 `docs/current-status.md` 与 `reports/formal_evaluation.*`。
+
 ## 目标与边界
 
 当前正式文件 `data/eval/formal_questions.jsonl` 保持 30 道 development 题不变。扩展草稿为 `data/eval/formal_questions_draft_041_070.jsonl`，其中包含 30 道待人工标注的题目骨架：新增 development 10 道、test 20 道。完成人工标注与复核后，正式目标是合计 60 道题，其中 development 40 道、test 20 道。

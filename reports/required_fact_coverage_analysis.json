@@ -1,4 +1,6 @@
 {
+  "report_status": "historical_stale",
+  "historical_notice": "旧 Required Fact Coverage 诊断；当前口径与数值见 reports/formal_evaluation.*。",
   "analysis_type": "required_fact_coverage_diagnosis",
   "generated_at": "2026-07-01T16:59:28+08:00",
   "source_files": [

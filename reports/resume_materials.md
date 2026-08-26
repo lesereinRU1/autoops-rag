@@ -1,5 +1,7 @@
 # AutoOps RAG 简历与面试材料
 
+> **Historical / stale / 历史版本材料。** 本文包含 Stage G 前 Planner、旧 corpus 和旧测试数字，不得作为当前简历文案；当前面试事实见 `docs/current-status.md` 与 `docs/interview-notes.md`。
+
 > 建议项目标题：AutoOps RAG——工业设备手册检索与故障辅助系统
 >
 > 项目角色：个人项目｜独立开发者
@@ -99,4 +101,3 @@ Formal 集只有 60 题，官方来源可回答题占比 6%，独立复核题为
 推荐写“个人项目 / 独立开发”“在 35 道 development ranking-only 题上取得……”“shadow overlay 中计划有效率为……”。
 
 避免写“生产级”“企业落地”“问答准确率 100%”“Agent 自主完成故障诊断”“已减少现场停机时间”。这些结论当前没有数据支持。
-
