@@ -14,7 +14,7 @@ interface ChatFormProps {
 
 export function ChatForm({ loading, onSubmit, onCancel }: ChatFormProps) {
   const [query, setQuery] = useState(
-    "为什么设备手册写 40001，而 Modbus TCP 报文地址常从 0 开始？",
+    "请从 Siemens 官方资料“Modbus/TCP with MB_CLIENT and MB_SERVER”（Entry-ID 102020340）的 Table 1-1 和 Table 1-2 中，比较 S7-1200 作为 client/server 时的 connection setup、local port、remote port。",
   );
   const [model, setModel] = useState("S7-1200");
   const [version, setVersion] = useState("");

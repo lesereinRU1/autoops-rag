@@ -56,7 +56,7 @@ flowchart LR
 
 ![AutoOps RAG React Demo](docs/images/react-demo-current.png)
 
-React 页面通过 workflow-level SSE 展示工作流阶段，并在完成后用真实 Trace 标出 Planner attempted/applied/skipped/fallback、工具、检索、Rewrite、Evidence Gate、Generation、Citation Guard、budget 和复用状态。当前不是 Token Streaming，最终回答随 `completed` 事件一次性返回。
+图中是一次真实受控执行：Planner 是 deterministic / rule-based planner，不是 LLM Planner；它只对部分 intent 启用，其余请求仍走稳定固定流程。React 通过 workflow-level SSE 展示阶段事件（不是 token streaming），最终回答随 `completed` 事件一次性返回。
 
 ### 当前正式评测
 
