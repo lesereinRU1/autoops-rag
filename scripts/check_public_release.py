@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import subprocess
 from pathlib import Path
@@ -21,6 +22,13 @@ SECRET_PATTERNS = {
     "private key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "credential in URL": re.compile(rb"https?://[^\s/:]+:[^\s/@]+@"),
 }
+# SHA-256 of the single test-only marker used by the runtime metrics
+# non-disclosure regression test. Keep the marker itself out of this allowlist.
+SECRET_VALUE_SHA256_ALLOWLIST = frozenset(
+    {
+        "e45b70f127a7ea79c376679a0ef33673bb569ab48801d8209af58256c32a0a2d",
+    }
+)
 
 
 def git(*args: str) -> bytes:
@@ -32,12 +40,20 @@ def candidate_files() -> list[str]:
     return sorted(path.decode("utf-8") for path in raw.split(b"\0") if path)
 
 
+def is_allowlisted_secret(value: bytes) -> bool:
+    return hashlib.sha256(value).hexdigest() in SECRET_VALUE_SHA256_ALLOWLIST
+
+
+def has_unallowlisted_match(pattern: re.Pattern[bytes], content: bytes) -> bool:
+    return any(not is_allowlisted_secret(match.group(0)) for match in pattern.finditer(content))
+
+
 def scan_content(label: str, content: bytes) -> list[str]:
     findings: list[str] = []
     if b"\0" in content:
         return findings
     for name, pattern in SECRET_PATTERNS.items():
-        if pattern.search(content):
+        if has_unallowlisted_match(pattern, content):
             findings.append(f"{label}: matched {name}")
     return findings
 
@@ -65,7 +81,7 @@ def scan_history() -> list[str]:
     return [
         f"Git history: matched {name}"
         for name, pattern in SECRET_PATTERNS.items()
-        if pattern.search(patch)
+        if has_unallowlisted_match(pattern, patch)
     ]
 
 
